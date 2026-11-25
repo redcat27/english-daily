@@ -1,0 +1,52 @@
+{
+  "learner": "me",
+  "nativeLanguage": "zh-CN",
+  "updatedAt": "2026-11-25",
+  "baseline": {
+    "cet4": "未通过",
+    "schoolEnglish": "初中（高中内容基本遗忘）",
+    "claimedLevel": "A2",
+    "vocabularySize": 1600,
+    "speaking": "几乎无法开口，语法靠中式直译",
+    "confidence": "怕说错，所以不说"
+  },
+  "goals": {
+    "primary": "口语表达优先：能开口说清楚，不追求写作",
+    "sixMonth": [
+      "能用简单英语完成日常场景对话：点餐、购物、问路、酒店、看医生、打电话",
+      "每个场景掌握 5 个能直接说出口的句子，并应对一句追问",
+      "掌握 2000 高频词（听说读写不限，会用即可）",
+      "听懂慢速英语材料（VOA / BBC Learning English）60% 主干信息"
+    ]
+  },
+  "constraints": {
+    "dailyMinutes": 45,
+    "budget": "不付费：不买 App、不买课程，用自建小程序 + Codex + 免费公开材料",
+    "avoid": [
+      "语法术语讲解和长篇精读",
+      "背单词书式刷词量",
+      "追求书写和作文",
+      "一次学太多导致第二天放弃"
+    ]
+  },
+  "preferences": {
+    "focus": ["口语", "听力输入", "场景句型", "发音"],
+    "deprioritize": ["写作", "语法体系", "学术词汇", "考试技巧"]
+  },
+  "method": {
+    "core": "影子跟读 → 情景对话 → 复述 → 开口输出，循环",
+    "principles": [
+      "先能开口，再谈准确",
+      "输入材料要慢、要短、可重复",
+      "每天必须有产出（录音/说话），不能只输入",
+      "错别怕，用改错代替纠错讲解"
+    ]
+  },
+  "adaptation": {
+    "promoteThreshold": 85,
+    "demoteThreshold": 65,
+    "promoteAfterDays": 2,
+    "demoteAfterDays": 2,
+    "levels": ["A2", "A2+", "B1"]
+  }
+}

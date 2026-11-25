@@ -1,0 +1,86 @@
+{
+  "id": "day-003",
+  "title": "购物与试穿",
+  "scene": "服装店 / 超市",
+  "level": "A2",
+  "minutes": 45,
+  "goal": "能问价格、问尺码、试穿并决定买或不买",
+  "warmup": [
+    { "en": "How much is this?", "cn": "这个多少钱？" },
+    { "en": "Do you have this in a bigger size?", "cn": "这个有大一号的吗？" },
+    { "en": "Can I try it on?", "cn": "我可以试穿吗？" },
+    { "en": "Can I pay by card?", "cn": "可以刷卡吗？" },
+    { "en": "I'll take it.", "cn": "我要这个。" }
+  ],
+  "vocab": [
+    { "word": "price", "phonetic": "/praɪs/", "pos": "n.", "meaning": "价格", "sentence": "The price is on the label.", "sentenceCn": "价格写在标签上。", "tip": "How much is it? 比 What's the price? 更口语。" },
+    { "word": "size", "phonetic": "/saɪz/", "pos": "n.", "meaning": "尺码；大小", "sentence": "Do you have this in size M?", "sentenceCn": "这个有 M 码吗？", "tip": "尺码用大写字母：S / M / L / XL。" },
+    { "word": "cheap", "phonetic": "/tʃiːp/", "pos": "adj.", "meaning": "便宜的", "sentence": "It's cheap but it looks nice.", "sentenceCn": "它很便宜，但看起来不错。", "tip": "cheap 结尾是 /p/，别读成 /tʃiːp/ 之外的音。" },
+    { "word": "expensive", "phonetic": "/ɪkˈspensɪv/", "pos": "adj.", "meaning": "贵的", "sentence": "That one is too expensive for me.", "sentenceCn": "那个对我来说太贵了。", "tip": "重音在第二个音节：ex-PEN-sive。" },
+    { "word": "try on", "phonetic": "/traɪ ɒn/", "pos": "phr.v.", "meaning": "试穿", "sentence": "Can I try it on?", "sentenceCn": "我可以试穿吗？", "tip": "动词代词要放中间：try it on，不能说 try on it。" },
+    { "word": "card", "phonetic": "/kɑːd/", "pos": "n.", "meaning": "（信用）卡", "sentence": "Can I pay by card?", "sentenceCn": "可以刷卡吗？", "tip": "by card 是“刷卡”，in cash 是“现金”。" },
+    { "word": "receipt", "phonetic": "/rɪˈsiːt/", "pos": "n.", "meaning": "收据", "sentence": "Could I have a receipt, please?", "sentenceCn": "可以给我张收据吗？", "tip": "receipt 中的 p 不发音。" },
+    { "word": "exchange", "phonetic": "/ɪksˈtʃeɪndʒ/", "pos": "v./n.", "meaning": "退换；交换", "sentence": "Can I exchange this shirt?", "sentenceCn": "这件衬衫可以换吗？", "tip": "ex-CHANGE，重音在第二个音节。" }
+  ],
+  "dialogue": {
+    "scene": "服装店买衬衫",
+    "lines": [
+      { "speaker": "A", "en": "Excuse me, how much is this shirt?", "cn": "不好意思，这件衬衫多少钱？" },
+      { "speaker": "B", "en": "It's thirty-five dollars.", "cn": "三十五美元。" },
+      { "speaker": "A", "en": "Oh, that's more expensive than I thought. Do you have a cheaper one?", "cn": "哦，这比我预想的贵。有便宜一点的吗？" },
+      { "speaker": "B", "en": "How about this one? It's twenty dollars.", "cn": "这件呢？二十美元。" },
+      { "speaker": "A", "en": "Can I try it on?", "cn": "我可以试穿吗？" },
+      { "speaker": "B", "en": "Of course. The fitting room is over there.", "cn": "当然可以，试衣间在那边。" },
+      { "speaker": "A", "en": "It fits me. I'll take it. Can I pay by card?", "cn": "很合身，我要了。可以刷卡吗？" },
+      { "speaker": "B", "en": "Sure. Here's your receipt.", "cn": "当然可以。这是您的收据。" }
+    ],
+    "rolePlay": [
+      "跟读两遍后互换角色：你当店员，给出价格、尺码建议。",
+      "加 1 句追问：'Do you want to try a bigger size?'",
+      "练习一次拒绝：'It's too expensive. Can I come back later?'"
+    ],
+    "upgrades": [
+      "How much is this → 'Excuse me, how much does this cost?'",
+      "Do you have a cheaper one → 'Do you have something less expensive?'",
+      "I'll take it → 'I'll take it, thanks.'（加谢谢更自然）"
+    ]
+  },
+  "article": {
+    "title": "A Saturday Shopping Trip",
+    "text": [
+      "On Saturday morning I go to a big shopping centre with my wife.",
+      "She looks at clothes and I look at shoes.",
+      "I always try things on before I buy them.",
+      "Last week I bought a pair of shoes for forty dollars.",
+      "My wife bought two shirts and a red bag.",
+      "We went home at four o'clock and had dinner."
+    ],
+    "cn": [
+      "周六早上我和妻子去一个大商场。",
+      "她看衣服，我看鞋。",
+      "我买之前总是先试穿。",
+      "上周我买了一双四十美元的鞋。",
+      "我妻子买了两件衬衫和一个红包。",
+      "我们四点回家，然后吃晚饭。"
+    ],
+    "questions": [
+      "他们什么时候去商场？",
+      "他买什么？他怎么买的？",
+      "他们几点回家？"
+    ],
+    "retell": "用 3 句英文说说你最近一次买东西的经历。"
+  },
+  "output": {
+    "prompt": "用英语在店里完成一次购物，说满 3 句：问价格 → 问尺码或试穿 → 决定买或换。",
+    "scaffold": [
+      "Excuse me, how much is ___?",
+      "Do you have it in size ___?",
+      "I'll take it / It's too expensive, thank you."
+    ],
+    "sample": [
+      "Excuse me, how much is this jacket?",
+      "Do you have it in a bigger size?",
+      "It fits me. I'll take it. Can I pay by card?"
+    ]
+  }
+}

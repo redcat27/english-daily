@@ -1,0 +1,86 @@
+{
+  "id": "day-001",
+  "title": "自我介绍与寒暄",
+  "scene": "认识新朋友",
+  "level": "A2",
+  "minutes": 45,
+  "goal": "能用 3 句话介绍自己，并回应对方一个问题",
+  "warmup": [
+    { "en": "Hi, I'm Lei. Nice to meet you.", "cn": "嗨，我是雷，很高兴认识你。" },
+    { "en": "I'm from Beijing, China.", "cn": "我来自中国北京。" },
+    { "en": "I work at a small company.", "cn": "我在一家小公司上班。" },
+    { "en": "What do you do?", "cn": "你是做什么工作的？" },
+    { "en": "I'm learning English every day.", "cn": "我每天都在学英语。" }
+  ],
+  "vocab": [
+    { "word": "beginner", "phonetic": "/bɪˈɡɪnə(r)/", "pos": "n.", "meaning": "初学者", "sentence": "I am a beginner in English.", "sentenceCn": "我是英语初学者。", "tip": "beginner 是“初学者”，比 student 更强调水平低。" },
+    { "word": "practise", "phonetic": "/ˈpræktɪs/", "pos": "v.", "meaning": "练习", "sentence": "I practise English for twenty minutes every day.", "sentenceCn": "我每天练二十分钟英语。", "tip": "英式动词拼 practise，美式拼 practice，别混用。" },
+    { "word": "improve", "phonetic": "/ɪmˈpruːv/", "pos": "v.", "meaning": "提高；改善", "sentence": "My English is improving slowly.", "sentenceCn": "我的英语在慢慢变好。", "tip": "improve 后面直接跟名词，不要加 to。" },
+    { "word": "every day", "phonetic": "/ˈevri deɪ/", "pos": "adv.", "meaning": "每天", "sentence": "I read one short article every day.", "sentenceCn": "我每天读一篇短文。", "tip": "every day 是“每天”（名词短语），everyday 是“日常的”（形容词）。" },
+    { "word": "a bit", "phonetic": "/ə bɪt/", "pos": "adv.", "meaning": "一点；有点", "sentence": "My English is a bit better now.", "sentenceCn": "我的英语现在好了一点。", "tip": "a bit 放形容词/副词前面：a bit tired。" },
+    { "word": "job", "phonetic": "/dʒɒb/", "pos": "n.", "meaning": "工作；职位", "sentence": "What kind of job do you have?", "sentenceCn": "你做什么工作？", "tip": "问职业用 job 更口语，work 在这里指“工作内容/工作场所”。" },
+    { "word": "hobby", "phonetic": "/ˈhɒbi/", "pos": "n.", "meaning": "爱好", "sentence": "My hobby is cooking and walking.", "sentenceCn": "我的爱好是做饭和散步。", "tip": "hobby 读三个音节：Hob-by，重音在前。" },
+    { "word": "country", "phonetic": "/ˈkʌntri/", "pos": "n.", "meaning": "国家；乡下", "sentence": "Which country are you from?", "sentenceCn": "你来自哪个国家？" }
+  ],
+  "dialogue": {
+    "scene": "办公室第一次见面",
+    "lines": [
+      { "speaker": "A", "en": "Hi, I'm Lei. Nice to meet you.", "cn": "嗨，我是雷，很高兴认识你。" },
+      { "speaker": "B", "en": "Hi, I'm Sarah. Nice to meet you too.", "cn": "嗨，我是萨拉，也很高兴认识你。" },
+      { "speaker": "A", "en": "I'm from Beijing, China. How about you?", "cn": "我来自中国北京。你呢？" },
+      { "speaker": "B", "en": "I'm from London. I work here as an accountant.", "cn": "我来自伦敦，我在这儿做会计。" },
+      { "speaker": "A", "en": "What do you do in your free time?", "cn": "你空闲时间做什么？" },
+      { "speaker": "B", "en": "I like running. I run every morning.", "cn": "我喜欢跑步，每天早上都跑。" },
+      { "speaker": "A", "en": "That's great. I'm a beginner in English, so I practise every day.", "cn": "真棒。我是英语初学者，所以每天都练。" },
+      { "speaker": "B", "en": "Me too. Good luck!", "cn": "我也是。祝你好运！" }
+    ],
+    "rolePlay": [
+      "分两遍读：第一遍只读英文，第二遍英文+中文对照。",
+      "然后角色扮演：你扮演 Sarah，用你的真实情况替换 Lei 的信息，再演一遍。",
+      "加 1 句追问：'How long have you been learning English?'"
+    ],
+    "upgrades": [
+      "Nice to meet you → 熟人之间可以说 'Good to see you.'",
+      "I'm a beginner → 'I'm still learning English, so please speak slowly.'",
+      "What do you do? → 更自然 'What do you do for a living?'"
+    ]
+  },
+  "article": {
+    "title": "A Normal Day",
+    "text": [
+      "My name is Lei and I am thirty years old.",
+      "I get up at seven and have breakfast with my family.",
+      "I work at a small company and I go there by subway.",
+      "In the afternoon, I often drink tea and read a short article.",
+      "On weekends, I stay at home and practise English for one hour.",
+      "I am a beginner, but I am learning every day."
+    ],
+    "cn": [
+      "我叫雷，今年三十岁。",
+      "我七点起床，和家人一起吃早餐。",
+      "我在一家小公司上班，坐地铁过去。",
+      "下午我经常喝杯茶，读一篇短文。",
+      "周末我待在家里练一小时英语。",
+      "我是初学者，但我每天都在进步。"
+    ],
+    "questions": [
+      "他每天几点起床？",
+      "他怎么去公司？",
+      "周末他做什么？"
+    ],
+    "retell": "用 3 句英文复述他周末做了什么（不要照抄，用你能说的简单句）。"
+  },
+  "output": {
+    "prompt": "用英语介绍自己，说满 3 句：姓名 + 来自哪里 + 工作或爱好。",
+    "scaffold": [
+      "Hi, I'm ___.",
+      "I'm from ___.",
+      "I work at ___." 
+    ],
+    "sample": [
+      "Hi, I'm Lei. Nice to meet you.",
+      "I'm from Beijing, China.",
+      "I work at a small company, and my hobby is cooking."
+    ]
+  }
+}
