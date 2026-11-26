@@ -234,26 +234,32 @@
 .word-main, .line .body { padding-right: 46px; }
 .para-en > .en { padding-right: 46px; }
 
-.word-top > .speak,
-.para-en > .speak,
-.line > .speak {
+/* SpeakerButton 外层是 span.speaker-control，定位要落在这一层 */
+.word-top > .speaker-control,
+.para-en > .speaker-control,
+.line > .speaker-control {
   position: absolute;
-  right: 10px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 2;
+  display: block;
+}
+.word-top > .speaker-control .speak,
+.para-en > .speaker-control .speak,
+.line > .speaker-control .speak {
   width: 34px;
   height: 34px;
-  z-index: 1;
-}
-.eg-row > .speak {
-  position: absolute;
-  right: 0;
-  top: 2px;
-  transform: none;
-  width: 32px;
-  height: 32px;
 }
 .eg-row { position: relative; padding-right: 40px; }
+.eg-row > .speaker-control {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 2;
+  display: block;
+}
+.eg-row > .speaker-control .speak { width: 32px; height: 32px; }
 
 /* 复习卡：与新词卡同款；收起时只显示英文 */
 .review-card .review-hint {
