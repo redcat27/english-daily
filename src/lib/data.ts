@@ -239,11 +239,13 @@ export async function getStats(key: UserKey) {
     select: { graduated: true, hits: true, dueDate: true },
   });
 
+  // 连续学习天数：从今天（或昨天）往回数连续的自然日
+  const studied = new Set(feedbacks.map((row) => toIso(row.date)));
   let streak = 0;
-  for (const row of feedbacks) {
-    const gap = Math.round((today.getTime() - row.date.getTime()) / 86400000);
-    if (gap === streak) streak += 1;
-    else if (gap > streak) break;
+  let cursor = studied.has(toIso(today)) ? today : addDays(today, -1);
+  while (studied.has(toIso(cursor))) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
   }
 
   return {
