@@ -27,9 +27,10 @@
 
 `POST /api/feedback` 先保存当天反馈（201）；`POST /api/next-preview` 启动**第二天**的课程生成（202），页面通过 `GET /api/next-preview?task=...` 查询结果。
 
-- 模型顺序：SenseNova `deepseek-flash` → `sensenova-6.8-flash-lite` → MiniMax `MiniMax-M2.5`。遇到限流、超时、空结果或校验失败自动切换，每个模型最多一次，整条链路共用 85 秒预算。
+- 模型顺序：MiniMax `MiniMax-M2.5` → SenseNova `deepseek-flash` → `sensenova-6.8-flash-lite`。遇到限流、超时、空结果或校验失败自动切换，每个模型最多一次，整条链路共用 85 秒预算。
 - 后台执行使用 Next.js `after()`，数据库任务锁避免重复生成，已存在的次日课程直接复用。任务失败可以重试；不会把体验课程当成 AI 结果入库。
-- 新用户第一课为 Day 1，首次打开不在首屏等待 AI：先显示体验课程，浏览器通过 `/api/next-preview?day=today` 后台准备第一课。之后一直保留当前课，跨天或中断不会自动生成新课、增加 Day。提交反馈并成功生成后，预告下一课 Day N+1；从明天起显示下一课，失败或重复提交不跳号。
+- 新用户第一课为 Day 1，日期按北京时间切换，每天只学习当天课程。首次缺课通过 `/api/next-preview?day=today` 后台准备，不在首屏等待 AI。未提交生成下一课时 Day 不递增，缺课时按当天日期重新准备同一 Day 的内容。
+- 提交反馈后生成明天 Day N+1，普通重复 POST 直接返回已保存结果。下一课预览从数据库恢复，刷新后仍可见；输入提示词并明确点击才会用 PATCH 替换同一 Day 的明天课程。版本号及用户/当前课任务锁防重复，失败保留旧版；只预览，不产生明天的学习记录。
 - 一次生成整课并校验章节、条目数量及数据库字段长度，避免不同场景内容拼接。日志只记录模型、耗时和状态。
 
 - 输入：学习者历史反馈（跟读/阅读分数 + 一句话难点）、到期的复习词、最近用过的场景、当前难度档
@@ -42,7 +43,7 @@
 
 | 表 | 内容 | 保留策略 |
 | --- | --- | --- |
-| `daily_lessons` | 按 Day 编号的对话/短文/单词 | 保留课程序列，日期表示可开始学习的日期；未推进时继续当前课 |
+| `daily_lessons` | 按日期及 Day 编号的对话/短文/单词 | 主页面只取当天；明天只能预览和改写，`revision` 记录版本 |
 | `word_progress` | 每个词的盒子等级、记住次数、下次复习日 | 长期保留（复习的依据） |
 | `review_events` | 每次复习的「记住了/没记住」 | 长期保留（成长轨迹） |
 | `feedbacks` | 每天的跟读/阅读分数 + 一句话难点 | 长期保留（AI 迭代依据） |
@@ -61,7 +62,7 @@
 
 ```bash
 pnpm install
-cp .env.example .env      # 填 Neon、SenseNova Key；MiniMax 为文本备用及 TTS
+cp .env.example .env      # 填 Neon、MiniMax Key 与 SenseNova 备用 Key
 pnpm db:migrate -- --name init
 pnpm dev
 ```
@@ -72,7 +73,7 @@ pnpm dev
 
 Vercel 项目挂在 team `teefsjiang-5506`，连接 GitHub 仓库 `redcat27/english-daily` 后自动部署。
 函数区域配置为 `sin1`（新加坡），靠近 Neon 和模型供应商。生产部署后可运行 GitHub Actions 的 `Production smoke` 验证公开页面与后台生成。
-环境变量见 `.env.example`。课程生成使用 `SENSENOVA_API_KEY`、`SENSENOVA_CHAT_MODEL`、`SENSENOVA_FALLBACK_MODEL`、`AI_PRIMARY_PROVIDER`；MiniMax 备用和语音使用 `MINIMAX_API_KEY`。密钥仅在服务端读取。
+环境变量见 `.env.example`。`AI_PRIMARY_PROVIDER=minimax`，主模型及语音使用 `MINIMAX_API_KEY`；文本备用使用 `SENSENOVA_API_KEY`、`SENSENOVA_CHAT_MODEL`、`SENSENOVA_FALLBACK_MODEL`。密钥仅在服务端读取。
 域名 `english.lulunote.top` 已在 Cloudflare 配置 CNAME 到 `86018548a8e751f3.vercel-dns-017.com`，使用 DNS only（灰云），与 `teefs.lulunote.top` 的配置方式一致。HTTPS 证书由 Vercel 自动续期。
 
 ## 质量门禁

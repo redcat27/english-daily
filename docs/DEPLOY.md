@@ -48,10 +48,10 @@ pnpm build; pnpm start
 当前项目已连接 `redcat27/english-daily` 的 `main`，推送该分支会自动生产部署。
 修改供应商配置时先更新 Vercel 服务端环境变量，再部署；仅修改环境变量不会更新已存在的部署。
 
-课程生成配置：`AI_PRIMARY_PROVIDER=sensenova`、`SENSENOVA_API_KEY`、
+课程生成配置：`AI_PRIMARY_PROVIDER=minimax`、`SENSENOVA_API_KEY`、
 `SENSENOVA_BASE_URL=https://token.sensenova.cn/v1`、`SENSENOVA_CHAT_MODEL=deepseek-flash`、
 `SENSENOVA_FALLBACK_MODEL=sensenova-6.8-flash-lite`、`SENSENOVA_TIMEOUT_MS=40000`。
-`MINIMAX_API_KEY` 用于第三级文本备用和语音。SenseNova 限流后先尝试 Flash Lite。
+`MINIMAX_API_KEY` 用于优先文本生成和语音。文本失败后尝试 SenseNova DeepSeek Flash，再尝试 Flash Lite。
 
 `node scripts/vercel-env.mjs` 可从本地 `.env` 原位更新生产环境变量（不输出密钥）。
 
@@ -93,7 +93,10 @@ curl -s -X POST https://english.lulunote.top/api/tts -H "Content-Type: applicati
 ### 生成状态与故障排查
 
 - `/api/feedback` 的 201 只说明反馈已保存。`/api/next-preview` 首次 POST 返回 202，GET 返回 `running` / `done` / `failed`，`done` 才表示课程已保存。
-- 第一课使用 `POST /api/next-preview?day=today`，首屏本身不调用模型；已有可学习课程直接复用，跨天不自动生成。下一课必须有当前课开始日期之后的反馈，缺少时 POST 返回 409；生成成功后从明天起可学。Day 使用 `daily_lessons.dayIndex`，与反馈条数、日历天数分离；接口 `lesson` / `tomorrow` 摘要包含 `dayIndex`。旧任务跨午夜轮询按原任务日期对应的课程序列处理。
+- 每天只学习北京时间当天的课程；缺课用 `POST /api/next-preview?day=today` 后台准备，未提交推进时沿用最近 Day 编号，内容按当天重新生成。下一课 POST 必须携带 `sourceLessonId`，且当前课程已提交反馈；同一用户/当前课共用 `next:<sourceLessonId>` 任务锁，已保存时直接返回，刷新、重复点击及旧页面不会生成 Day N+2。
+- `GET /api/next-preview` 或 `?task=...` 返回持久化预览及任务进度；`tomorrow` 包含 `payload`、`date`、`dayIndex`、`revision`。`PATCH /api/next-preview` 接收 `{sourceLessonId, revision, prompt}`，提示词限 1–500 字，只覆盖明天同一 Day；重放旧 revision 直接返回新版，失败保留旧版。`revision` 整数随保存递增，API 使用摘要版本标记，避免模型返回相同内容时重复执行。
+- `POST /api/feedback` 也须携带 `sourceLessonId`，防止旧页面反馈误写入新课程。预览或改写不加入复习池，仅当前课进入复习池。
+- 手动清理测试数据：`node scripts/reset-test-learning.cjs` 默认统计，`--apply` 在备份到本地忽略目录 `.vercel/` 后只清理 english 的课程、任务、反馈和复习记录，保留用户档案；有活跃任务时拒绝执行。之后为每个用户启动当天第一课并验证 Day 1。
 - 2026-11-26：校正上线调试期间两位用户的现有课程为 Day 1；已存在的次日课程有反馈才编号为 Day 2，无反馈的旧测试预览保留内容并标记 `dayIndex=0`，不参与学习进度。未删除反馈、复习记录或课程内容；修复前快照保存在本地忽略目录 `.vercel/`。新逻辑停止按自然日删除课程。
   校正脚本 `node scripts/normalize-lesson-progress.cjs` 默认预览，`--apply` 写入并先保存快照；只允许在上述校正日期写入，避免以后误运行重置学习进度。
 - `vercel.json` 将函数放在 `sin1`，避免数据库与模型请求跨美洲绕行。

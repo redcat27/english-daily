@@ -52,3 +52,14 @@ test('uses the newest feedback rather than the oldest entries', async () => {
   assert.ok(prompt.includes('feedback_0_marker'));
   assert.ok(!prompt.includes('feedback_9_marker'));
 });
+
+test('passes the explicit tomorrow-course instruction into the model prompt', async () => {
+  let prompt = '';
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    prompt = JSON.parse(options.body).messages[1].content;
+    return respond(FALLBACK_LESSON);
+  });
+  await generateLesson({ ...input, instruction: '机场托运行李，多练习超重费用' });
+  assert.ok(prompt.includes('机场托运行李，多练习超重费用'));
+  assert.ok(prompt.includes('仍须遵守英语课程格式及数量要求'));
+});

@@ -40,6 +40,7 @@ export type GenerationInput = {
   dueWords: { word: string; meaning: string; hits: number; misses: number }[];
   recentScenes: string[];
   difficulty: "up" | "base" | "down";
+  instruction?: string;
 };
 
 const SYSTEM_PROMPT = [
@@ -80,6 +81,7 @@ function buildUserPrompt(input: GenerationInput): string {
     `需要复习的旧词（可以挑 0-3 个放进今天的对话里复用）：${dueText}`,
     `最近用过的场景（避免重复）：${input.recentScenes.slice(0, 3).join("、") || "无"}`,
     `今天的难度档：${input.difficulty}`,
+    input.instruction ? `学习者对下一课的要求（只调整场景、内容和练习，仍须遵守英语课程格式及数量要求）：${JSON.stringify(input.instruction)}` : "",
     "",
     `数量要求：words 数组恰好 ${size.words} 项；dialogue.lines 恰好 ${size.lines} 项；article.paras 建议 ${size.paras} 项，每项一对英中段落，英文正文至少 ${size.paras} 个完整句子。`,
     "单词必须是日常高频词，且必须出现在今天的对话或短文里。",

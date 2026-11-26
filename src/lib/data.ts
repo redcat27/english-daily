@@ -1,6 +1,7 @@
 // 服务端数据层：课程、复习池（SRS）、反馈。
 // 数据库没配好时全部走兜底内容，站点依然可用。
 import { Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { getPrisma, isDatabaseConfigured } from "./db";
 import { LEARNERS, type UserKey } from "./users";
 import { grade, startOfUtcDay, addDays, type GradeResult } from "./srs";
@@ -23,6 +24,8 @@ export type ReviewWord = {
 export type TodayData = {
   lesson: LessonPayload;
   dayIndex: number;
+  lessonId?: string;
+  nextLesson?: ReturnType<typeof previewLesson>;
   lessonWarning?: string;
   lessonPending?: boolean;
   review: ReviewWord[];
@@ -36,8 +39,9 @@ export type TodayData = {
   };
 };
 
-function dayKey(date: Date = new Date()): Date {
-  return startOfUtcDay(date);
+export function dayKey(date: Date = new Date()): Date {
+  // 学习日按北京时间切换；数据库 DATE 仍用 UTC 午夜表示日期键。
+  return startOfUtcDay(new Date(date.getTime() + 8 * 60 * 60 * 1000));
 }
 
 function toIso(date: Date): string {
@@ -102,7 +106,8 @@ export function pickDifficulty(feedback: { shadowing: number; reading: number }[
 async function createLessonFor(
   key: UserKey,
   date: Date,
-  dayIndex: number
+  dayIndex: number,
+  instruction?: string
 ): Promise<LessonPayload> {
   const [feedback, dueWords, recentScenes] = await Promise.all([
     getRecentFeedback(key), getDueWords(key, 12), getRecentScenes(key),
@@ -115,12 +120,14 @@ async function createLessonFor(
     dueWords: dueWords.map((w) => ({ word: w.word, meaning: w.meaning, hits: w.hits, misses: w.misses })),
     recentScenes,
     difficulty: pickDifficulty(feedback),
+    instruction,
   });
 
   if (isDatabaseConfigured()) {
     const prisma = getPrisma();
     const userId = await userIdOf(key);
     await prisma.$transaction(async (tx) => {
+      if (instruction && date.getTime() <= dayKey().getTime()) throw new Error("课程已开始学习，不能再改写。");
       await tx.dailyLesson.upsert({
         where: { userId_date: { userId, date } },
         update: {
@@ -128,6 +135,7 @@ async function createLessonFor(
           scene: payload.scene,
           title: payload.title,
           dayIndex,
+          revision: { increment: 1 },
           level: payload.level,
         },
         create: {
@@ -140,7 +148,6 @@ async function createLessonFor(
           payload: payload as unknown as Prisma.InputJsonValue,
         },
       });
-      await seedWords(tx, userId, payload, date);
     }, { timeout: 15000 });
   }
 
@@ -308,15 +315,18 @@ export function lessonSummary(lesson: LessonPayload) {
   };
 }
 
+export function previewLesson(row: { payload: unknown; dayIndex: number; date: Date; revision?: number }) {
+  const payload = row.payload as LessonPayload;
+  return { ...lessonSummary(payload), dayIndex: row.dayIndex, date: toIso(row.date), payload,
+    revision: createHash("sha256").update(`${row.revision ?? 0}:${JSON.stringify(payload)}`).digest("hex").slice(0, 16) };
+}
+
 // date 是课程可开始学习的日期；Day 是课程序号，不能由自然日或反馈条数推算。
 export async function getCurrentLesson(key: UserKey, date = dayKey()) {
   if (!isDatabaseConfigured()) return null;
   const userId = await userIdOf(key);
-  const rows = await getPrisma().dailyLesson.findMany({
-    where: { userId, date: { lte: date }, dayIndex: { gt: 0 } },
-    orderBy: { date: "desc" },
-  });
-  return rows.find((row) => isCompleteLesson(row.payload)) ?? null;
+  const row = await getPrisma().dailyLesson.findUnique({ where: { userId_date: { userId, date } } });
+  return row && row.dayIndex > 0 && isCompleteLesson(row.payload) ? row : null;
 }
 
 export async function canGenerateNextLesson(key: UserKey, date = dayKey()) {
@@ -329,18 +339,36 @@ export async function canGenerateNextLesson(key: UserKey, date = dayKey()) {
   return Boolean(feedback);
 }
 
+export async function getNextLesson(key: UserKey, source: { dayIndex: number; date?: Date }) {
+  if (!isDatabaseConfigured()) return null;
+  const userId = await userIdOf(key);
+  const date = addDays(source.date ?? dayKey(), 1);
+  const row = await getPrisma().dailyLesson.findUnique({ where: { userId_date: { userId, date } } });
+  return row?.dayIndex === source.dayIndex + 1 && isCompleteLesson(row.payload) ? row : null;
+}
+
 export async function getTodayData(key: UserKey): Promise<TodayData> {
   let lesson = FALLBACK_LESSON;
   let dayIndex = 1;
   let lessonWarning: string | undefined;
   let lessonPending = false;
+  let lessonId: string | undefined;
+  let nextLesson: TodayData["nextLesson"];
 
   if (isDatabaseConfigured()) {
     const existing = await getCurrentLesson(key);
     if (existing) {
       lesson = existing.payload as unknown as LessonPayload;
       dayIndex = existing.dayIndex;
+      lessonId = existing.id;
+      // 只在课程成为当前课后加入复习池；预览或反复改写明天课程不计入学习记录。
+      await seedWords(getPrisma(), existing.userId, existing.payload as unknown as LessonPayload, existing.date);
+      const next = await getNextLesson(key, existing);
+      if (next) nextLesson = previewLesson(next);
     } else {
+      const userId = await userIdOf(key);
+      const latest = await getPrisma().dailyLesson.findFirst({ where: { userId, dayIndex: { gt: 0 }, date: { lt: dayKey() } }, orderBy: { date: "desc" } });
+      dayIndex = latest?.dayIndex ?? 1;
       lessonPending = true;
       lessonWarning = "今日课程正在准备，以下暂为体验课程；完成后将自动更新。";
     }
@@ -348,7 +376,7 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
 
   const review = await getDueWords(key, 20);
   const stats = await getStats(key);
-  return { lesson, dayIndex, lessonWarning, lessonPending, review, stats };
+  return { lesson, dayIndex, lessonId, nextLesson, lessonWarning, lessonPending, review, stats };
 }
 
 export async function getStats(key: UserKey) {
@@ -459,17 +487,29 @@ export async function buildTodayLesson(key: UserKey): Promise<LessonPayload | nu
   if (!isDatabaseConfigured()) return null;
   const current = await getCurrentLesson(key);
   if (current) return current.payload as unknown as LessonPayload;
-  return createLessonFor(key, dayKey(), 1);
+  const userId = await userIdOf(key);
+  const previous = await getPrisma().dailyLesson.findFirst({ where: { userId, date: { lt: dayKey() }, dayIndex: { gt: 0 } }, orderBy: { date: "desc" } });
+  return createLessonFor(key, dayKey(), previous?.dayIndex ?? 1);
 }
 
-export async function buildTomorrowLesson(key: UserKey, tomorrow = addDays(dayKey(), 1)): Promise<LessonPayload | null> {
+export async function buildTomorrowLesson(key: UserKey, tomorrow = addDays(dayKey(), 1), sourceId?: string): Promise<LessonPayload | null> {
   if (!isDatabaseConfigured()) return null;
   const previousDay = addDays(tomorrow, -1);
   const current = await getCurrentLesson(key, previousDay);
+  if (sourceId && current?.id !== sourceId) throw new Error("当前课程已更新，请刷新页面后再提交。");
   if (!current || !await canGenerateNextLesson(key, previousDay)) throw new Error("请先完成当前课程并提交反馈。");
   const userId = await userIdOf(key);
   const prisma = getPrisma();
-  const existing = await prisma.dailyLesson.findUnique({ where: { userId_date: { userId, date: tomorrow } } });
-  if (existing && isCompleteLesson(existing.payload) && existing.dayIndex === current.dayIndex + 1) return existing.payload;
+  const prepared = await prisma.dailyLesson.findUnique({ where: { userId_date: { userId, date: tomorrow } } });
+  if (prepared && prepared.dayIndex === current.dayIndex + 1 && isCompleteLesson(prepared.payload)) return prepared.payload as unknown as LessonPayload;
   return createLessonFor(key, tomorrow, current.dayIndex + 1);
+}
+
+export async function regenerateTomorrowLesson(key: UserKey, sourceId: string, revision: string, instruction: string) {
+  const current = await getCurrentLesson(key);
+  if (!current || current.id !== sourceId) throw new Error("当前课程已更新，请刷新页面后再提交。");
+  const next = await getNextLesson(key, current);
+  if (!next || next.date.getTime() !== addDays(dayKey(), 1).getTime()) throw new Error("只能重新生成尚未开始学习的明天课程。");
+  if (previewLesson(next).revision !== revision) return next.payload as unknown as LessonPayload;
+  return createLessonFor(key, next.date, next.dayIndex, instruction);
 }

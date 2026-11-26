@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, isUserKey } from "@/lib/users";
-import { saveFeedback } from "@/lib/data";
+import { getCurrentLesson, saveFeedback } from "@/lib/data";
 
 // 提交反馈只负责落库，不等 AI（AI 生成放到 /api/next-preview，避免函数超时）
 export async function POST(request: Request) {
@@ -21,6 +21,10 @@ export async function POST(request: Request) {
   const note = body.note || "";
 
   try {
+    const current = await getCurrentLesson(user);
+    if (!current || body.sourceLessonId !== current.id) {
+      return Response.json({ ok: false, saved: false, error: "当前课程已更新，请刷新页面后再提交。" }, { status: 409 });
+    }
     await saveFeedback(user, shadowing, reading, note);
     return Response.json({ ok: true, saved: true }, { status: 201 });
   } catch {

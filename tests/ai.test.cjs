@@ -6,7 +6,7 @@ const { mock } = require('node:test');
 process.env.SENSENOVA_API_KEY = 'test-sensenova-key';
 process.env.MINIMAX_API_KEY = 'test-minimax-key';
 process.env.AI_PRIMARY_PROVIDER = 'sensenova';
-afterEach(() => mock.restoreAll());
+afterEach(() => { mock.restoreAll(); process.env.AI_PRIMARY_PROVIDER = 'sensenova'; });
 
 const completion = (content, finish_reason = 'stop') => Response.json({
   choices: [{ message: { content }, finish_reason }],
@@ -62,6 +62,32 @@ test('rejects MiniMax business errors even when HTTP status is 200', async () =>
     base_resp: { status_code: 2056, status_msg: 'quota exhausted' },
   }));
   await assert.rejects(chatCompletion('JSON only', 'Return ok'), /2056/);
+});
+
+test('MiniMax is the default first choice and succeeds without calling backups', async () => {
+  delete process.env.AI_PRIMARY_PROVIDER;
+  const { generateJson } = require('../src/lib/ai.ts');
+  const models = [];
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    models.push(JSON.parse(options.body).model);
+    return completion('{"ok":true}');
+  });
+  await generateJson('JSON only', 'Return ok', validate);
+  assert.deepEqual(models, ['MiniMax-M2.5']);
+});
+
+test('MiniMax failure falls back through DeepSeek Flash then Flash Lite once each', async () => {
+  process.env.AI_PRIMARY_PROVIDER = 'minimax';
+  const { generateJson } = require('../src/lib/ai.ts');
+  const models = [];
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    models.push(JSON.parse(options.body).model);
+    if (models.length === 1) return Response.json({ base_resp: { status_code: 2056 } });
+    if (models.length === 2) return Response.json({}, { status: 429 });
+    return completion('{"ok":true}');
+  });
+  await generateJson('JSON only', 'Return ok', validate);
+  assert.deepEqual(models, ['MiniMax-M2.5', 'deepseek-flash', 'sensenova-6.8-flash-lite']);
 });
 
 test('tries MiniMax only after both SenseNova models fail', async () => {

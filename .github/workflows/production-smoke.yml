@@ -51,7 +51,7 @@ jobs:
           state = json.loads(call('/api/next-preview', 200))
           assert state.get('status') in ['idle', 'running', 'done', 'failed']
           if state['status'] == 'done':
-              cached = json.loads(call('/api/next-preview', 200, {}))
+              cached = json.loads(call('/api/next-preview', 200, {'sourceLessonId': state['sourceLessonId']}))
               assert cached.get('tomorrow', {}).get('words', 0) > 0
           call('/api/session', 200, {'user': 'groot'})
           pending = json.loads(call('/api/next-preview?day=today', [200, 202], {}))

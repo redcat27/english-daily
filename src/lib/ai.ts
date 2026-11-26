@@ -51,7 +51,7 @@ export async function generateJson<T>(system: string, user: string, validate: (v
     })),
     { name: "minimax", configured: Boolean(process.env.MINIMAX_API_KEY), run: chatCompletion },
   ];
-  if (process.env.AI_PRIMARY_PROVIDER === "minimax") providers.unshift(providers.pop()!);
+  if (process.env.AI_PRIMARY_PROVIDER !== "sensenova") providers.unshift(providers.pop()!);
   const signal = AbortSignal.timeout(85000);
   for (const provider of providers.filter((item) => item.configured)) {
     if (signal.aborted) break;

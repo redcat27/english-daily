@@ -228,8 +228,12 @@ export default function LessonApp({ user, data }: Props) {
   const [note, setNote] = useState("");
   const [doneDialogue, setDoneDialogue] = useState(false);
   const [doneArticle, setDoneArticle] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [tomorrow, setTomorrow] = useState<{ scene: string; title: string; words: number; dayIndex: number } | null>(null);
+  const [submitted, setSubmitted] = useState(Boolean(data?.nextLesson));
+  const [tomorrow, setTomorrow] = useState<TodayData["nextLesson"]>(data?.nextLesson);
+  const [tomorrowPrompt, setTomorrowPrompt] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const submitting = useRef(false);
+  const [checkingNext, setCheckingNext] = useState(Boolean(user && !data?.lessonPending));
   const [generationMessage, setGenerationMessage] = useState("");
   const [todayMessage, setTodayMessage] = useState("");
   const [todayAttempt, setTodayAttempt] = useState(0);
@@ -297,6 +301,50 @@ export default function LessonApp({ user, data }: Props) {
     }
   };
 
+  // 恢复刷新/切回页面前已启动的后台任务；查询不会触发新生成。
+  useEffect(() => {
+    if (!activeUser || data?.lessonPending) return;
+    const controller = new AbortController();
+    let resumed = false;
+    const read = async (task?: string) => {
+      const response = await fetch(task ? `/api/next-preview?task=${encodeURIComponent(task)}` : "/api/next-preview", {
+        cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]),
+      });
+      if (!response.ok) throw new Error("无法查询下一课");
+      return response.json();
+    };
+    void (async () => {
+      try {
+        let result = await read();
+        const deadline = Date.now() + 125000;
+        while (result.status === "running" && Date.now() < deadline && !controller.signal.aborted) {
+          resumed = true;
+          submitting.current = true;
+          setBusy(true);
+          setGenerationMessage("正在恢复下一课的生成进度，请勿重复提交…");
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          result = await read(result.task);
+        }
+        if (controller.signal.aborted) return;
+        if (result.status === "done" && result.tomorrow) {
+          setTomorrow(result.tomorrow);
+          setSubmitted(true);
+          setGenerationMessage("下一课已生成并保存，明天开始学习。");
+        } else if (resumed || result.status === "failed") {
+          setGenerationMessage(result.error || "下一课尚未完成，可稍后重试查询。");
+        }
+      } catch {
+        if (resumed && !controller.signal.aborted) setGenerationMessage("暂时无法查询，重新打开页面可恢复进度。");
+      } finally {
+        if (!controller.signal.aborted) {
+          setCheckingNext(false);
+          if (resumed) { submitting.current = false; setBusy(false); }
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [activeUser, data?.lessonPending]);
+
   const onGrade = async (key: string, result: "know" | "forgot") => {
     try {
       const response = await fetch("/api/review", {
@@ -332,6 +380,8 @@ export default function LessonApp({ user, data }: Props) {
   };
 
   const submitFeedback = async () => {
+    if (submitting.current || tomorrow || checkingNext) return;
+    submitting.current = true;
     setBusy(true);
     setGenerationMessage("");
     let saved = false;
@@ -340,7 +390,7 @@ export default function LessonApp({ user, data }: Props) {
       const feedback = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shadowing, reading, note }),
+        body: JSON.stringify({ shadowing, reading, note, sourceLessonId: data?.lessonId }),
       });
       const receipt = await feedback.json().catch(() => ({}));
       if (!feedback.ok || !receipt.saved) throw new Error("反馈保存失败，请稍后重试");
@@ -349,7 +399,8 @@ export default function LessonApp({ user, data }: Props) {
       notify("反馈已保存，正在生成明天的课…");
 
       // 生成在服务器后台执行；浏览器只查询状态，不占用长请求。
-      const preview = await fetch("/api/next-preview", { method: "POST", signal: AbortSignal.timeout(10000) });
+      const preview = await fetch("/api/next-preview", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceLessonId: data?.lessonId }), signal: AbortSignal.timeout(10000) });
       let result = await preview.json().catch(() => ({}));
       if (!preview.ok) throw new Error("反馈已保存，课程暂时无法生成，请稍后重试。");
       const deadline = Date.now() + 125000;
@@ -363,15 +414,47 @@ export default function LessonApp({ user, data }: Props) {
       }
       if (result.status !== "done" || !result.tomorrow) throw new Error(result.error || "反馈已保存，课程仍未完成，请稍后重试。");
       setTomorrow(result.tomorrow);
-      setGenerationMessage("明天的课已生成并保存。");
+      setGenerationMessage("明天的课已生成并保存，可预览或按要求重新生成。");
       notify("明天的课已生成");
     } catch (error) {
       const message = saved ? (error instanceof Error && error.name !== "TimeoutError" ? error.message : "反馈已保存，课程生成暂时失败，请稍后重试。") : "反馈保存失败，请稍后重试。";
       setGenerationMessage(message);
       notify(message);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
+  };
+
+  const regenerateTomorrow = async () => {
+    if (!tomorrow || !data?.lessonId || !tomorrowPrompt.trim() || regenerating || submitting.current) return;
+    submitting.current = true;
+    setRegenerating(true);
+    setGenerationMessage("正在按你的要求重新生成明天的课…");
+    try {
+      let result = await fetch("/api/next-preview", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceLessonId: data.lessonId, revision: tomorrow.revision, prompt: tomorrowPrompt.trim() }),
+        signal: AbortSignal.timeout(10000),
+      }).then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "重新生成失败");
+        return body;
+      });
+      const deadline = Date.now() + 125000;
+      while (result.status === "running" && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        result = await fetch(`/api/next-preview?task=${encodeURIComponent(result.task)}`, {
+          cache: "no-store", signal: AbortSignal.timeout(10000),
+        }).then((response) => response.json());
+      }
+      if (result.status !== "done" || !result.tomorrow) throw new Error(result.error || "课程仍在生成，请稍后重试查询。");
+      setTomorrow(result.tomorrow);
+      setTomorrowPrompt("");
+      setGenerationMessage("明天的课程已按要求更新。");
+    } catch (error) {
+      setGenerationMessage(error instanceof Error ? error.message : "重新生成失败，原课程仍保留。");
+    } finally { submitting.current = false; setRegenerating(false); }
   };
 
   const gradedCount = review.filter((item) => item.graded).length;
@@ -422,6 +505,7 @@ export default function LessonApp({ user, data }: Props) {
         ) : null}
         <div className="hero">
           <div className="scene mono">Day {data?.dayIndex ?? 1} · 场景：{lesson?.scene}</div>
+          {tomorrow ? <p role="status">Day {tomorrow.dayIndex} 已生成并保存，明天开始学习。今天继续 Day {data?.dayIndex ?? 1}。</p> : null}
           <h1>{lesson?.title}</h1>
           <div className="chips">
             <span className="chip"><b>{stats?.streak ?? 0}</b> 天连续</span>
@@ -641,8 +725,8 @@ export default function LessonApp({ user, data }: Props) {
               placeholder="今天最难的地方是什么？（例：不知道怎么说“打包带走”）"
               onChange={(event) => setNote(event.target.value)}
             />
-            <button className="btn primary submit" onClick={submitFeedback} disabled={busy || data?.lessonPending}>
-              {busy ? "生成中，请稍候…" : submitted ? "反馈已保存，重试或查看明天的课" : "提交反馈，生成明天的课"}
+            <button className="btn primary submit" onClick={submitFeedback} disabled={busy || checkingNext || data?.lessonPending || Boolean(tomorrow)}>
+              {tomorrow ? `Day ${tomorrow.dayIndex} 已生成，无需重复提交` : checkingNext ? "正在查询生成进度…" : busy ? "生成中，请稍候…" : submitted ? "反馈已保存，重试生成下一课" : "提交反馈，生成明天的课"}
             </button>
             {generationMessage ? <p role="status" aria-live="polite">{generationMessage}</p> : null}
             {tomorrow ? (
@@ -655,13 +739,31 @@ export default function LessonApp({ user, data }: Props) {
                   <br />
                   {tomorrow.title}
                 </div>
+                <details style={{ marginTop: 12 }}>
+                  <summary className="btn">预览明天课程</summary>
+                  <div style={{ marginTop: 12 }}>
+                    <h3>{tomorrow.payload.scene} · 单词</h3>
+                    <ul>{tomorrow.payload.words.map((word, index) => <li key={`${word.word}-${index}`}>{word.word}：{word.meaning}</li>)}</ul>
+                    <h3>{tomorrow.payload.dialogue.scene} · 对话</h3>
+                    {tomorrow.payload.dialogue.lines.map((line, index) => <p key={index}><b>{line.speaker}:</b> {line.en}<br />{line.cn}</p>)}
+                    <h3>{tomorrow.payload.article.title} · 短文</h3>
+                    {tomorrow.payload.article.paras.map((paragraph, index) => <p key={index}>{paragraph.en}<br />{paragraph.cn}</p>)}
+                  </div>
+                </details>
+                <label htmlFor="tomorrow-prompt" style={{ display: "block", marginTop: 12 }}>调整明天课程</label>
+                <textarea id="tomorrow-prompt" maxLength={500} value={tomorrowPrompt}
+                  placeholder="例如：改成机场托运行李场景，多练习询问行李超重费用"
+                  onChange={(event) => setTomorrowPrompt(event.target.value)} />
+                <button className="btn" type="button" disabled={!tomorrowPrompt.trim() || regenerating || busy || checkingNext} onClick={regenerateTomorrow}>
+                  {regenerating ? "正在重新生成…" : "按提示词重新生成明天课程"}
+                </button>
               </div>
             ) : null}
           </div>
         </section>
 
         <div className="proto-note">
-          <b>学习进度</b>：Day 表示课程序号。未提交生成下一课时，当前课程会一直保留；成功生成后，下一课从明天起可学，中断学习不会跳号。
+          <b>学习进度</b>：每天只学习当天课程；明天课程可预览，也可输入要求重新生成。普通重复提交不会再生成或跳号，Day 只随成功生成的下一课推进。
           单词的复习状态（盒子等级、记住次数、下次复习日）和每天的学习反馈长期保留，作为 AI 生成次日课程的依据。
         </div>
       </main>
