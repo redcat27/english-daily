@@ -10,11 +10,20 @@ export async function POST(request: Request) {
   if (!isUserKey(user)) {
     return Response.json({ ok: false, error: "no session" }, { status: 401 });
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return Response.json({ ok: false, error: "invalid feedback" }, { status: 400 });
+  }
 
-  const shadowing = Math.max(0, Math.min(100, Number(body?.shadowing) || 0));
-  const reading = Math.max(0, Math.min(100, Number(body?.reading) || 0));
-  const note = String(body?.note || "");
+  const { shadowing, reading } = body;
+  if (![shadowing, reading].every((score) => typeof score === "number" && Number.isInteger(score) && score >= 0 && score <= 100) || (body.note !== undefined && typeof body.note !== "string")) {
+    return Response.json({ ok: false, error: "反馈分数应为 0–100 的整数" }, { status: 400 });
+  }
+  const note = body.note || "";
 
-  await saveFeedback(user, shadowing, reading, note);
-  return Response.json({ ok: true, saved: true });
+  try {
+    await saveFeedback(user, shadowing, reading, note);
+    return Response.json({ ok: true, saved: true }, { status: 201 });
+  } catch {
+    return Response.json({ ok: false, saved: false, error: "反馈保存失败，请稍后重试" }, { status: 503 });
+  }
 }

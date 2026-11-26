@@ -10,9 +10,14 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "no session" }, { status: 401 });
   }
   const word = String(body?.word || "");
-  const result = body?.result === "know" ? "know" : "forgot";
-  if (!word) return Response.json({ ok: false, error: "word required" }, { status: 400 });
+  const result = body?.result;
+  if (!word || word.length > 80 || (result !== "know" && result !== "forgot")) return Response.json({ ok: false, error: "invalid review" }, { status: 400 });
 
-  const next = await gradeWord(user, word, result);
-  return Response.json({ ok: true, next });
+  try {
+    const next = await gradeWord(user, word, result);
+    if (!next) return Response.json({ ok: false, error: "复习条目不存在" }, { status: 404 });
+    return Response.json({ ok: true, next });
+  } catch {
+    return Response.json({ ok: false, error: "复习结果保存失败" }, { status: 503 });
+  }
 }

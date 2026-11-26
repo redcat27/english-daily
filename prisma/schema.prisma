@@ -29,6 +29,7 @@ model User {
   words     WordProgress[]
   reviews   ReviewEvent[]
   feedbacks Feedback[]
+  tasks     GenerationTask[]
 
   @@schema("english")
   @@map("users")
@@ -79,6 +80,25 @@ model WordProgress {
   @@map("word_progress")
 }
 
+model GenerationTask {
+  id         String    @id @default(cuid())
+  userId     String
+  taskKey    String    @db.VarChar(40)
+  status     String    @db.VarChar(16)
+  startedAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  finishedAt DateTime?
+  error      String    @db.VarChar(300) @default("")
+  summary    String    @db.VarChar(400) @default("")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskKey])
+  @@index([userId, status])
+  @@schema("english")
+  @@map("generation_tasks")
+}
+
 model ReviewEvent {
   id        String   @id @default(cuid())
   userId    String
@@ -111,5 +131,3 @@ model Feedback {
   @@schema("english")
   @@map("feedbacks")
 }
-
-

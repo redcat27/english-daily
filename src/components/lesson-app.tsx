@@ -252,6 +252,7 @@ export default function LessonApp({ user, data }: Props) {
   const [doneArticle, setDoneArticle] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [tomorrow, setTomorrow] = useState<{ scene: string; title: string; words: number } | null>(null);
+  const [generationMessage, setGenerationMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [tab, setTab] = useState<"word" | "sentence">("word");
@@ -288,19 +289,6 @@ export default function LessonApp({ user, data }: Props) {
   };
 
   const onGrade = async (key: string, result: "know" | "forgot") => {
-    setSentenceGrades((prev) => ({ ...prev, [key]: result }));
-    setReview((prev) =>
-      prev.map((item) =>
-        item.word === key || key.startsWith(item.word)
-          ? {
-              ...item,
-              graded: result,
-              box: result === "know" ? Math.min(item.box + 1, INTERVALS.length) : 1,
-              hits: result === "know" ? item.hits + 1 : 0,
-            }
-          : item
-      )
-    );
     try {
       const response = await fetch("/api/review", {
         method: "POST",
@@ -308,13 +296,16 @@ export default function LessonApp({ user, data }: Props) {
         body: JSON.stringify({ word: key, result }),
       });
       const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.next) throw new Error("复习结果未保存");
       if (payload?.next) {
         const next = payload.next;
+        setSentenceGrades((prev) => ({ ...prev, [key]: result }));
         setReview((prev) =>
           prev.map((item) =>
-            item.word === key || key.startsWith(item.word)
+            item.word === key
               ? {
                   ...item,
+                  graded: result,
                   box: next.box,
                   hits: next.hits,
                   graduatedNow: next.graduated,
@@ -327,33 +318,48 @@ export default function LessonApp({ user, data }: Props) {
         else notify("没关系，明天再来一次");
       }
     } catch {
-      notify("已记录（离线）");
+      notify("复习结果未保存，请重试。");
     }
   };
 
   const submitFeedback = async () => {
     setBusy(true);
+    setGenerationMessage("");
+    let saved = false;
     try {
       // 第一步：反馈落库（快，不等 AI）
-      await fetch("/api/feedback", {
+      const feedback = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shadowing, reading, note }),
       });
+      const receipt = await feedback.json().catch(() => ({}));
+      if (!feedback.ok || !receipt.saved) throw new Error("反馈保存失败，请稍后重试");
+      saved = true;
       setSubmitted(true);
       notify("反馈已保存，正在生成明天的课…");
 
-      // 第二步：单独请求生成明天的课（AI 可能要 20-40 秒）
-      const preview = await fetch("/api/next-preview", { method: "POST" });
-      const data = await preview.json().catch(() => ({}));
-      if (data?.tomorrow) {
-        setTomorrow(data.tomorrow);
-        notify("明天的课已生成");
-      } else {
-        notify("反馈已保存，明天的课会在明早打开时生成");
+      // 生成在服务器后台执行；浏览器只查询状态，不占用长请求。
+      const preview = await fetch("/api/next-preview", { method: "POST", signal: AbortSignal.timeout(10000) });
+      let result = await preview.json().catch(() => ({}));
+      if (!preview.ok) throw new Error("反馈已保存，课程暂时无法生成，请稍后重试。");
+      const deadline = Date.now() + 125000;
+      const task = result.task;
+      while (result.status === "running" && Date.now() < deadline) {
+        setGenerationMessage("反馈已保存，正在生成明天的课…");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const status = await fetch(`/api/next-preview?task=${encodeURIComponent(task)}`, { cache: "no-store", signal: AbortSignal.timeout(10000) });
+        result = await status.json().catch(() => ({}));
+        if (!status.ok) throw new Error("反馈已保存，暂时无法查询课程，请稍后重试。");
       }
-    } catch {
-      notify("保存失败，请稍后再试");
+      if (result.status !== "done" || !result.tomorrow) throw new Error(result.error || "反馈已保存，课程仍未完成，请稍后重试。");
+      setTomorrow(result.tomorrow);
+      setGenerationMessage("明天的课已生成并保存。");
+      notify("明天的课已生成");
+    } catch (error) {
+      const message = saved ? (error instanceof Error && error.name !== "TimeoutError" ? error.message : "反馈已保存，课程生成暂时失败，请稍后重试。") : "反馈保存失败，请稍后重试。";
+      setGenerationMessage(message);
+      notify(message);
     } finally {
       setBusy(false);
     }
@@ -399,6 +405,7 @@ export default function LessonApp({ user, data }: Props) {
       </header>
 
       <main className="wrap">
+        {data?.lessonWarning ? <p role="status">{data.lessonWarning}</p> : null}
         <div className="hero">
           <div className="scene mono">Day {stats ? stats.totalDays + 1 : 1} · 场景：{lesson?.scene}</div>
           <h1>{lesson?.title}</h1>
@@ -621,8 +628,9 @@ export default function LessonApp({ user, data }: Props) {
               onChange={(event) => setNote(event.target.value)}
             />
             <button className="btn primary submit" onClick={submitFeedback} disabled={busy}>
-              {busy ? "生成中，请稍候…" : "提交反馈，生成明天的课"}
+              {busy ? "生成中，请稍候…" : submitted ? "反馈已保存，重试或查看明天的课" : "提交反馈，生成明天的课"}
             </button>
+            {generationMessage ? <p role="status" aria-live="polite">{generationMessage}</p> : null}
             {tomorrow ? (
               <div style={{ marginTop: 14, padding: 12, borderRadius: "var(--radius-lg)", background: "var(--color-primary-highlight)", border: "1px solid transparent" }}>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--color-primary)", letterSpacing: ".06em", marginBottom: 6 }}>
