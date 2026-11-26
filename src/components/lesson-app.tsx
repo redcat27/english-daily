@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Learner } from "@/lib/users";
 import type { ReviewWord, TodayData } from "@/lib/data";
 import type { LessonPayload } from "@/lib/lesson";
+import { startPronunciation, type PlaybackState } from "@/lib/pronunciation";
 
 type Props = {
   user: Learner | null;
@@ -56,68 +57,45 @@ async function ttsCachePut(key: string, blob: Blob): Promise<void> {
   }
 }
 
-function speakWithBrowser(text: string) {
-  if (typeof window === "undefined" || !window.speechSynthesis) return false;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  const voices = window.speechSynthesis.getVoices();
-  const en = voices.filter((v) => /^en(-|_)/i.test(v.lang));
-  const voice =
-    en.find((v) => /en-US/i.test(v.lang) && /natural|enhanced|premium|samantha|google/i.test(v.name)) ||
-    en.find((v) => /en-US/i.test(v.lang)) ||
-    en[0];
-  if (voice) utterance.voice = voice;
-  utterance.lang = "en-US";
-  utterance.rate = 0.95;
-  window.speechSynthesis.speak(utterance);
-  return true;
-}
-
-async function playBlob(blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const audio = new Audio(url);
-  audio.play().catch(() => undefined);
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
 /* ---------------- 小组件 ---------------- */
 
 function SpeakerButton({ text, label }: { text: string; label?: string }) {
-  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<PlaybackState>("idle");
+  const [error, setError] = useState("");
+  const stop = useRef<(() => void) | null>(null);
+  const errorId = useId();
+  const busy = state === "loading" || state === "playing";
 
-  const onClick = async (event: MouseEvent) => {
+  useEffect(() => () => stop.current?.(), []);
+
+  // 保持同步调用：iPhone 不能等异步接口失败后才尝试系统语音。
+  const onClick = (event: MouseEvent, forceSystem = false) => {
     event.stopPropagation();
-    if (busy) return;
-    setBusy(true);
-    try {
-      const cached = await ttsCacheGet(text);
-      if (cached) {
-        await playBlob(cached);
-        return;
-      }
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (response.ok) {
-        const blob = await response.blob();
-        await ttsCachePut(text, blob);
-        await playBlob(blob);
-        return;
-      }
-      speakWithBrowser(text);
-    } catch {
-      speakWithBrowser(text);
-    } finally {
-      setTimeout(() => setBusy(false), 600);
+    if (busy) {
+      stop.current?.();
+      return;
     }
+    setError("");
+    stop.current = startPronunciation(text, {
+      forceSystem: forceSystem || state === "error",
+      cache: { read: ttsCacheGet, write: ttsCachePut },
+      onState: (next, message) => { setState(next); setError(message || ""); },
+    });
   };
 
   return (
-    <button className={"speak" + (busy ? " playing" : "")} onClick={onClick} aria-label={label || "朗读"}>
-      <svg className="ic"><use href="#i-play" /></svg>
-    </button>
+    <span className="speaker-control">
+      <button type="button" className={"speak" + (busy ? " playing" : "")} onClick={onClick}
+        aria-label={busy ? "停止朗读" : label || "朗读"} aria-pressed={busy} aria-describedby={error ? errorId : undefined}>
+        {busy ? <span aria-hidden="true">■</span> : <svg className="ic"><use href="#i-play" /></svg>}
+      </button>
+      {error ? (
+        <span className="audio-error" id={errorId} role="status">
+          {error}
+          <button type="button" className="btn-sm" onClick={(event) => onClick(event, true)}>使用系统朗读</button>
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -603,7 +581,7 @@ export default function LessonApp({ user, data }: Props) {
               </div>
             ))}
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-              <SpeakerButton text={(lesson?.article.paras ?? []).map((p) => p.en).join(". ")} label="通读全文" />
+              <SpeakerButton text={(lesson?.article.paras ?? []).map((p) => p.en).join(" ")} label="通读全文" />
               <button
                 className={"btn" + (doneArticle ? "" : " primary")}
                 onClick={() => setDoneArticle((value) => !value)}

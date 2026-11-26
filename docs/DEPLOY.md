@@ -97,4 +97,6 @@ curl -s -X POST https://english.lulunote.top/api/tts -H "Content-Type: applicati
 - 生成任务在 `english.generation_tasks`；单个候选最多尝试一次，共享 85 秒生成预算。五分钟仍未结束的任务视为僵死，可重试。
 - HTTP 200 也可能包含供应商业务错误。MiniMax `base_resp.status_code=2056` 表示 Token Plan 用量耗尽，不能通过延长超时修复。SenseNova `EndpointRPMExceeded` 表示该模型推理限流。
 - MiniMax TTS 目前同样受额度限制时，页面使用现有浏览器朗读降级；SenseNova 文本模型不会提供音频。
+- iPhone / iPad / Safari 的所有朗读按钮直接在点击调用栈里启动系统英语语音，不在请求 MiniMax 或读取 IndexedDB 之后才降级。桌面仍可用 MiniMax 音频；云服务失败时提供明确的“使用系统朗读”重试按钮，短期内跳过失效云服务。播放拒绝不会被吞掉，按钮显示实际开始/结束状态并支持停止。
+- `pnpm test:browser` 使用 WebKit iPhone 模拟和 Chromium 验证真实页面交互；语音引擎与音频设备在自动化中使用测试替身，验证调用时机、错误提示、停止和重试，不代表已完成实体 iPhone 的听感验收。真机应确认媒体音量、静音状态和蓝牙输出。
 - 2026-11-26：Next.js / eslint-config-next 升至 16.4.5。运行依赖审计剩余两条 high 均来自 Prisma CLI 的 `@prisma/config` → `effect` / `deepmerge-ts`；应用服务器不导入该配置解析链路。暂不对 Prisma 6 的内部依赖做破坏性 override；下次升级 Prisma 时复核。
