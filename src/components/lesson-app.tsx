@@ -476,13 +476,14 @@ export default function LessonApp({ user, data }: Props) {
         <div className="top-inner">
           <div className="brand">
             <span className="dot" />
-            每日英语 <small className="mono">daily-english</small>
+            <span className="brand-copy">每日英语 <small className="mono">daily-english</small></span>
           </div>
           <div className="spacer" />
           {activeUser ? (
-            <button className="user-chip" onClick={() => setPickerOpen(true)}>
-              <span className={"avatar mini " + activeUser.key}>{activeUser.initial}</span>
+            <button type="button" className="user-chip" aria-label={`当前学习者 ${activeUser.name}，切换用户`} aria-expanded={pickerOpen} onClick={() => setPickerOpen(true)}>
+              <span aria-hidden="true" className={"avatar mini " + activeUser.key}>{activeUser.initial}</span>
               <span>{activeUser.name}</span>
+              <svg className="ic user-caret" aria-hidden="true"><use href="#i-caret" /></svg>
             </button>
           ) : null}
           <button
