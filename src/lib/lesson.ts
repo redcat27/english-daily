@@ -62,7 +62,7 @@ function buildUserPrompt(input: GenerationInput): string {
 
   const dueText = input.dueWords.length
     ? input.dueWords
-        .slice(0, 30)
+        .slice(0, 12)
         .map((w) => `${w.word}(${w.meaning})`)
         .join("、")
     : "无";
@@ -78,49 +78,19 @@ function buildUserPrompt(input: GenerationInput): string {
     `学习者：${input.learner.name}，当前级别 ${input.learner.level}`,
     `最近学习反馈：\n${feedbackText}`,
     `需要复习的旧词（可以挑 0-3 个放进今天的对话里复用）：${dueText}`,
-    `最近用过的场景（避免重复）：${input.recentScenes.join("、") || "无"}`,
+    `最近用过的场景（避免重复）：${input.recentScenes.slice(0, 3).join("、") || "无"}`,
     `今天的难度档：${input.difficulty}`,
-    "",
-    `请生成今天的课程，JSON 结构如下（字段一个都不能少）：`,
-    JSON.stringify(
-      {
-        scene: "场景名，中文，例如「在餐厅点餐」",
-        title: "今天的目标，中文一句话",
-        level: input.learner.level,
-        minutes: 45,
-        words: [
-          {
-            word: "menu",
-            phonetic: "/ˈmenjuː/",
-            pos: "n.",
-            meaning: "菜单",
-            example: "Could I see the menu, please?",
-            exampleCn: "可以给我看下菜单吗？",
-            tip: "发音要点，一句话",
-          },
-        ],
-        dialogue: {
-          scene: "对话场景，中文",
-          lines: [{ speaker: "A", en: "英文句子", cn: "中文" }],
-          upgrades: ["原句 → 更地道的说法（中文说明）"],
-          followUp: "一句追问练习题",
-        },
-        article: {
-          title: "短文标题",
-          paras: [{ en: "英文句子", cn: "中文" }],
-          questions: [{ q: "中文问题", a: "中文答案" }],
-          retell: "用 3 句复述的中文任务说明",
-        },
-        reviewSentences: [{ en: "值得记住的整句", cn: "中文", source: "出处场景" }],
-      },
-      null,
-      2
-    ),
     "",
     `数量要求：单词 ${size.words} 个、对话 ${size.lines} 句、短文 ${size.paras} 句。`,
     "单词必须是日常高频词，且必须出现在今天的对话或短文里。",
   ].join("\n");
 }
+
+const WORDS_SPEC = `只输出下面这个 JSON（字段一个都不能少），不要任何解释：
+{"scene":"场景名，中文","title":"今天的目标，中文一句话","words":[{"word":"","phonetic":"/.../","pos":"","meaning":"","example":"","exampleCn":"","tip":""}],"dialogue":{"scene":"","lines":[{"speaker":"A","en":"","cn":""}],"upgrades":["原句 → 更地道的说法（中文说明）"],"followUp":"一句追问练习题"}}`;
+
+const ARTICLE_SPEC = `只输出下面这个 JSON（字段一个都不能少），不要任何解释：
+{"article":{"title":"","paras":[{"en":"","cn":""}],"questions":[{"q":"","a":""}],"retell":""},"reviewSentences":[{"en":"","cn":"","source":""}]}`;
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -206,23 +176,44 @@ export function normalizeLesson(raw: unknown, fallback: LessonPayload): LessonPa
   };
 }
 
-export async function generateLesson(input: GenerationInput): Promise<LessonPayload> {
-  const prompt = buildUserPrompt(input);
-  let raw = await chatCompletion(SYSTEM_PROMPT, prompt);
-  let parsed = parseJsonLoose(raw);
+async function generatePart(prompt: string, spec: string, label: string): Promise<Record<string, unknown> | null> {
+  let raw = await chatCompletion(SYSTEM_PROMPT, prompt + "\n\n" + spec);
+  let parsed = parseJsonLoose(raw) as Record<string, unknown> | null;
   if (!parsed) {
-    console.warn("[lesson] JSON 解析失败，重试一次（更严格的指令）", raw.slice(0, 200));
+    console.warn(`[lesson] ${label} JSON 解析失败，重试一次`, raw.slice(0, 160));
     raw = await chatCompletion(
       SYSTEM_PROMPT + "\n重要：只输出一个 JSON 对象，第一个字符必须是 {，最后一个字符必须是 }，不要任何解释、前后缀或 Markdown 围栏。",
-      prompt + "\n（再次提醒：只输出 JSON 对象本身）"
+      prompt + "\n\n" + spec
     );
-    parsed = parseJsonLoose(raw);
+    parsed = parseJsonLoose(raw) as Record<string, unknown> | null;
   }
   if (!parsed) {
-    console.error("[lesson] 重试后仍不是合法 JSON", raw.slice(0, 200));
-    throw new Error("MiniMax 返回的内容不是合法 JSON");
+    console.error(`[lesson] ${label} 重试后仍不是合法 JSON`, raw.slice(0, 160));
+    return null;
   }
-  return normalizeLesson(parsed, FALLBACK_LESSON);
+  return parsed;
+}
+
+export async function generateLesson(input: GenerationInput): Promise<LessonPayload> {
+  const prompt = buildUserPrompt(input);
+
+  // 两次调用并行：单词+对话 / 短文+题目+整句，各自更短，整体更快
+  const [wordsPart, articlePart] = await Promise.all([
+    generatePart(prompt, WORDS_SPEC, "单词与对话").catch((error) => {
+      console.error("[lesson] 单词与对话生成失败:", error);
+      return null;
+    }),
+    generatePart(prompt, ARTICLE_SPEC, "短文与题目").catch((error) => {
+      console.error("[lesson] 短文与题目生成失败:", error);
+      return null;
+    }),
+  ]);
+
+  const merged: Record<string, unknown> = { ...(wordsPart ?? {}), ...(articlePart ?? {}) };
+  if (!Object.keys(merged).length) {
+    throw new Error("MiniMax 两段内容都生成失败");
+  }
+  return normalizeLesson(merged, FALLBACK_LESSON);
 }
 
 export const FALLBACK_LESSON: LessonPayload = {

@@ -45,6 +45,8 @@ function extractText(data: unknown): string {
   return asText(message.content) || asText(first.text);
 }
 
+const CHAT_TIMEOUT_MS = Number(process.env.MINIMAX_TIMEOUT_MS || 25000);
+
 export async function chatCompletion(
   systemPrompt: string,
   userPrompt: string
@@ -54,6 +56,7 @@ export async function chatCompletion(
   const response = await fetch(withGroupId(CHAT_ENDPOINT), {
     method: "POST",
     headers: authHeaders(),
+    signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
     body: JSON.stringify({
       model: process.env.MINIMAX_CHAT_MODEL || "MiniMax-M2.5",
       messages: [
@@ -63,6 +66,8 @@ export async function chatCompletion(
       temperature: 0.4,
       // M2.5 是推理模型，输出偏长；上限给足，避免 JSON 被截断
       max_tokens: 8192,
+      // 结构化 JSON 任务不需要推理：关掉思考可把耗时减半（实测 8s -> 4s）
+      thinking: { type: process.env.MINIMAX_THINKING === "enabled" ? "enabled" : "disabled" },
       stream: false,
     }),
   });
@@ -183,6 +188,7 @@ export async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; m
   const response = await fetch(withGroupId(TTS_ENDPOINT), {
     method: "POST",
     headers: authHeaders(),
+    signal: AbortSignal.timeout(Number(process.env.MINIMAX_TTS_TIMEOUT_MS || 15000)),
     body: JSON.stringify({
       model: process.env.MINIMAX_TTS_MODEL || "speech-2.8-turbo",
       text,
