@@ -65,7 +65,8 @@ export async function GET(request: Request) {
     if (current.response) return current.response;
     if (current.lesson) return ready(current.lesson.payload, current.lesson.dayIndex);
     const task = await getTask(current.userId, current.taskKey);
-    return Response.json({ ok: task?.status !== "failed", status: task?.status ?? "idle", error: task?.error || undefined }, {
+    const status = task?.status === "done" ? "failed" : task?.status ?? "idle";
+    return Response.json({ ok: status !== "failed", status, error: task?.error || (status === "failed" ? "课程尚未准备完成，请提交反馈后重试。" : undefined) }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch {
