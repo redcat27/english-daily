@@ -358,9 +358,9 @@ export async function getNextLesson(key: UserKey, source: { dayIndex: number; da
 export async function pruneOldLessons(userId: string) {
   if (!isDatabaseConfigured()) return 0;
   const prisma = getPrisma();
-  const cutoff = addDays(dayKey(), 1); // 当天与第二天都保留
+  // 只清理早于今天的课程：当天与第二天完整保留
   const result = await prisma.dailyLesson.updateMany({
-    where: { userId, dayIndex: { gt: 0 }, date: { lt: cutoff } },
+    where: { userId, dayIndex: { gt: 0 }, date: { lt: dayKey() } },
     data: { payload: { archived: true } as unknown as Prisma.InputJsonValue },
   });
   return result.count;
@@ -535,3 +535,4 @@ export async function regenerateTomorrowLesson(key: UserKey, sourceId: string, r
   if (previewLesson(next).revision !== revision) return next.payload as unknown as LessonPayload;
   return createLessonFor(key, next.date, next.dayIndex, instruction);
 }
+
