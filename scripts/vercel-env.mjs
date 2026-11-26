@@ -47,24 +47,18 @@ async function main() {
   }
   console.log('项目 ' + project.name + ' id=' + project.id);
 
-  // 清理同名旧变量
-  const existing = await (await fetch(api + '/v10/projects/' + project.id + '/env?decrypt=false', { headers })).json();
-  const names = ['DATABASE_URL', 'DIRECT_URL', 'MINIMAX_API_KEY', 'MINIMAX_BASE_URL', 'MINIMAX_CHAT_MODEL', 'MINIMAX_TTS_MODEL', 'MINIMAX_VOICE_ID', 'MINIMAX_VOICE_SPEED'];
-  for (const item of existing.envs || []) {
-    if (names.includes(item.key)) {
-      await fetch(api + '/v10/projects/' + project.id + '/env/' + item.id, { method: 'DELETE', headers });
-    }
-  }
-
+  // 原位更新生产变量，避免先删除导致失败时丢失原配置。
+  const names = ['DATABASE_URL', 'DIRECT_URL', 'MINIMAX_API_KEY', 'MINIMAX_BASE_URL', 'MINIMAX_CHAT_MODEL', 'MINIMAX_TTS_MODEL', 'MINIMAX_VOICE_ID', 'MINIMAX_VOICE_SPEED', 'MINIMAX_THINKING', 'MINIMAX_TIMEOUT_MS', 'AI_PRIMARY_PROVIDER', 'SENSENOVA_API_KEY', 'SENSENOVA_BASE_URL', 'SENSENOVA_CHAT_MODEL', 'SENSENOVA_FALLBACK_MODEL', 'SENSENOVA_TIMEOUT_MS'];
   for (const name of names) {
     if (!env[name]) continue;
-    const res = await fetch(api + '/v10/projects/' + project.id + '/env', {
+    const res = await fetch(api + '/v10/projects/' + project.id + '/env?upsert=true', {
       method: 'POST',
       headers,
       body: JSON.stringify({ key: name, value: env[name], type: 'encrypted', target: ['production'] }),
     });
     const body = await res.json().catch(() => ({}));
     console.log((res.ok ? '✓ ' : '✗ ') + name + (res.ok ? '' : ' -> ' + JSON.stringify(body).slice(0, 160)));
+    if (!res.ok) throw new Error('环境变量更新失败：' + name);
   }
 }
 

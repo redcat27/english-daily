@@ -45,6 +45,16 @@ pnpm build; pnpm start
 
 ## 4. 部署到 Vercel
 
+当前项目已连接 `redcat27/english-daily` 的 `main`，推送该分支会自动生产部署。
+修改供应商配置时先更新 Vercel 服务端环境变量，再部署；仅修改环境变量不会更新已存在的部署。
+
+课程生成配置：`AI_PRIMARY_PROVIDER=sensenova`、`SENSENOVA_API_KEY`、
+`SENSENOVA_BASE_URL=https://token.sensenova.cn/v1`、`SENSENOVA_CHAT_MODEL=deepseek-flash`、
+`SENSENOVA_FALLBACK_MODEL=sensenova-6.8-flash-lite`、`SENSENOVA_TIMEOUT_MS=40000`。
+`MINIMAX_API_KEY` 用于第三级文本备用和语音。SenseNova 限流后先尝试 Flash Lite。
+
+`node scripts/vercel-env.mjs` 可从本地 `.env` 原位更新生产环境变量（不输出密钥）。
+
 ```powershell
 $env:VERCEL_TOKEN = "你的 token"
 node scripts/deploy-vercel.mjs
@@ -77,3 +87,11 @@ curl -s -X POST https://english.lulunote.top/api/tts -H "Content-Type: applicati
 | 线上 `/api/tts` 返回 503 | Vercel 上没配 `MINIMAX_API_KEY` | 重跑 `scripts/deploy-vercel.mjs` |
 | 线上页面是兜底内容（点餐场景固定不变） | `MINIMAX_CHAT_MODEL` 没生效或接口报错 | 看 Vercel 部署日志里的 `[lesson] AI 生成失败` |
 | 复习区一直是空 | 没连数据库 | 确认 `.env` 有 `DATABASE_URL`，且跑过 `scripts/db-setup.mjs` |
+
+### 生成状态与故障排查
+
+- `/api/feedback` 的 201 只说明反馈已保存。`/api/next-preview` 首次 POST 返回 202，GET 返回 `running` / `done` / `failed`，`done` 才表示课程已保存。
+- 生成任务在 `english.generation_tasks`；单个候选最多尝试一次，共享 85 秒生成预算。五分钟仍未结束的任务视为僵死，可重试。
+- HTTP 200 也可能包含供应商业务错误。MiniMax `base_resp.status_code=2056` 表示 Token Plan 用量耗尽，不能通过延长超时修复。SenseNova `EndpointRPMExceeded` 表示该模型推理限流。
+- MiniMax TTS 目前同样受额度限制时，页面使用现有浏览器朗读降级；SenseNova 文本模型不会提供音频。
+- 2026-11-26：Next.js / eslint-config-next 升至 16.4.5。运行依赖审计剩余两条 high 均来自 Prisma CLI 的 `@prisma/config` → `effect` / `deepmerge-ts`；应用服务器不导入该配置解析链路。暂不对 Prisma 6 的内部依赖做破坏性 override；下次升级 Prisma 时复核。
