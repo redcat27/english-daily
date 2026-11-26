@@ -334,15 +334,24 @@ export default function LessonApp({ user, data }: Props) {
   const submitFeedback = async () => {
     setBusy(true);
     try {
-      const response = await fetch("/api/feedback", {
+      // 第一步：反馈落库（快，不等 AI）
+      await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shadowing, reading, note }),
       });
-      const payload = await response.json().catch(() => ({}));
       setSubmitted(true);
-      if (payload?.tomorrow) setTomorrow(payload.tomorrow);
-      notify("反馈已保存，明天的课已生成");
+      notify("反馈已保存，正在生成明天的课…");
+
+      // 第二步：单独请求生成明天的课（AI 可能要 20-40 秒）
+      const preview = await fetch("/api/next-preview", { method: "POST" });
+      const data = await preview.json().catch(() => ({}));
+      if (data?.tomorrow) {
+        setTomorrow(data.tomorrow);
+        notify("明天的课已生成");
+      } else {
+        notify("反馈已保存，明天的课会在明早打开时生成");
+      }
     } catch {
       notify("保存失败，请稍后再试");
     } finally {
@@ -612,7 +621,7 @@ export default function LessonApp({ user, data }: Props) {
               onChange={(event) => setNote(event.target.value)}
             />
             <button className="btn primary submit" onClick={submitFeedback} disabled={busy}>
-              {busy ? "生成中…" : "提交反馈，生成明天的课"}
+              {busy ? "生成中，请稍候…" : "提交反馈，生成明天的课"}
             </button>
             {tomorrow ? (
               <div style={{ marginTop: 14, padding: 12, borderRadius: "var(--radius-lg)", background: "var(--color-primary-highlight)", border: "1px solid transparent" }}>

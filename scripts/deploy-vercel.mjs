@@ -52,11 +52,18 @@ if (!token) {
 const run = (args) => spawnSync('npx', ['vercel', ...args, '--token', token, '--yes'], { cwd: root, env, stdio: 'inherit', shell: true }).status === 0;
 
 const vars = ['DATABASE_URL', 'DIRECT_URL', 'MINIMAX_API_KEY', 'MINIMAX_BASE_URL', 'MINIMAX_CHAT_MODEL', 'MINIMAX_TTS_MODEL', 'MINIMAX_VOICE_ID', 'MINIMAX_VOICE_SPEED'];
+
+// 第一次部署：创建项目（此时还没有环境变量）
+console.log('> vercel deploy --prod (创建项目)');
+run(['deploy', '--prod']);
+
 for (const name of vars) {
   if (!env[name]) continue;
   console.log('> vercel env add ' + name);
   run(['env', 'add', name, '--value', env[name], '--environment', 'production']);
 }
 
-console.log('> vercel deploy --prod');
+// 第二次部署：带上环境变量
+console.log('> vercel deploy --prod (带环境变量)');
 run(['deploy', '--prod']);
+

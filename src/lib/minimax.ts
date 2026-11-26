@@ -61,6 +61,8 @@ export async function chatCompletion(
         { role: "user", content: userPrompt },
       ],
       temperature: 0.4,
+      // M2.5 是推理模型，输出偏长；上限给足，避免 JSON 被截断
+      max_tokens: 8192,
       stream: false,
     }),
   });
@@ -72,16 +74,107 @@ export async function chatCompletion(
   return extractText(data);
 }
 
+/** 从任意文本里抠出第一个完整的 JSON 对象（忽略 ```json 围栏、前后解释文字） */
+function extractJsonObject(text: string): string | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const source = fenced ? fenced[1] : text;
+  const start = source.indexOf("{");
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < source.length; i += 1) {
+    const ch = source[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/** JSON 被 max_tokens 截断时，补齐未闭合的字符串/括号再试一次 */
+function repairTruncatedJson(text: string): string | null {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+  for (const ch of text) {
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+    if (!inString) {
+      if (ch === "{" || ch === "[") stack.push(ch);
+      else if (ch === "}" || ch === "]") stack.pop();
+    }
+    out += ch;
+  }
+  if (inString) out += '"';
+  out = out.replace(/,\s*$/, "");
+  for (let i = stack.length - 1; i >= 0; i -= 1) out += stack[i] === "{" ? "}" : "]";
+  return out;
+}
+
 export function parseJsonLoose(raw: string): unknown {
   const text = String(raw || "");
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-  if (!candidate) return null;
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return null;
+  if (!text.trim()) return null;
+
+  const direct = extractJsonObject(text);
+  if (direct) {
+    try {
+      return JSON.parse(direct);
+    } catch {
+      // 继续尝试修复
+    }
   }
+
+  const repaired = repairTruncatedJson(direct ?? text);
+  if (repaired) {
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      // 继续尝试截断到最后一个完整片段
+    }
+    let cut = repaired.length;
+    while (cut > 0) {
+      cut = repaired.lastIndexOf(",", cut - 1);
+      if (cut <= 0) break;
+      const candidate = repaired.slice(0, cut).replace(/,\s*$/, "") + "]}";
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        // 继续回退
+      }
+    }
+  }
+  return null;
 }
 
 export async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; mime: string } | null> {

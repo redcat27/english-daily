@@ -207,9 +207,21 @@ export function normalizeLesson(raw: unknown, fallback: LessonPayload): LessonPa
 }
 
 export async function generateLesson(input: GenerationInput): Promise<LessonPayload> {
-  const raw = await chatCompletion(SYSTEM_PROMPT, buildUserPrompt(input));
-  const parsed = parseJsonLoose(raw);
-  if (!parsed) throw new Error("MiniMax 返回的内容不是合法 JSON");
+  const prompt = buildUserPrompt(input);
+  let raw = await chatCompletion(SYSTEM_PROMPT, prompt);
+  let parsed = parseJsonLoose(raw);
+  if (!parsed) {
+    console.warn("[lesson] JSON 解析失败，重试一次（更严格的指令）", raw.slice(0, 200));
+    raw = await chatCompletion(
+      SYSTEM_PROMPT + "\n重要：只输出一个 JSON 对象，第一个字符必须是 {，最后一个字符必须是 }，不要任何解释、前后缀或 Markdown 围栏。",
+      prompt + "\n（再次提醒：只输出 JSON 对象本身）"
+    );
+    parsed = parseJsonLoose(raw);
+  }
+  if (!parsed) {
+    console.error("[lesson] 重试后仍不是合法 JSON", raw.slice(0, 200));
+    throw new Error("MiniMax 返回的内容不是合法 JSON");
+  }
   return normalizeLesson(parsed, FALLBACK_LESSON);
 }
 

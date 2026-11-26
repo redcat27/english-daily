@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, isUserKey } from "@/lib/users";
-import { buildTomorrowLesson, saveFeedback } from "@/lib/data";
+import { saveFeedback } from "@/lib/data";
 
+// 提交反馈只负责落库，不等 AI（AI 生成放到 /api/next-preview，避免函数超时）
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const store = await cookies();
@@ -15,18 +16,5 @@ export async function POST(request: Request) {
   const note = String(body?.note || "");
 
   await saveFeedback(user, shadowing, reading, note);
-
-  let tomorrow = null;
-  try {
-    tomorrow = await buildTomorrowLesson(user);
-  } catch (error) {
-    console.error("[feedback] 生成明天课程失败:", error);
-  }
-
-  return Response.json({
-    ok: true,
-    tomorrow: tomorrow
-      ? { scene: tomorrow.scene, title: tomorrow.title, words: tomorrow.words.length }
-      : null,
-  });
+  return Response.json({ ok: true, saved: true });
 }

@@ -102,7 +102,7 @@ async function createLessonFor(
   dayIndex: number
 ): Promise<LessonPayload> {
   const feedback = await getRecentFeedback(key);
-  const dueWords = await getDueWords(key, 30);
+  const dueWords = await getDueWords(key, 12);
   const recentScenes = await getRecentScenes(key);
   const learner = LEARNERS[key];
 
