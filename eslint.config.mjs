@@ -14,8 +14,10 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "prototype/**",
     "seed/**",
+    "scripts/**/*.cjs",
   ]),
 ]);
 
 export default eslintConfig;
+
 

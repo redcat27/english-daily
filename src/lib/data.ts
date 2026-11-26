@@ -52,11 +52,18 @@ export async function ensureUser(key: UserKey) {
   });
 }
 
+/** 外键用的是用户 id（cuid），不是 key（teefs/groot） */
+async function userIdOf(key: UserKey): Promise<string> {
+  const user = await ensureUser(key);
+  return user ? user.id : key;
+}
+
 export async function getRecentFeedback(key: UserKey) {
   if (!isDatabaseConfigured()) return [];
   const prisma = getPrisma();
+  const userId = await userIdOf(key);
   const rows = await prisma.feedback.findMany({
-    where: { userId: key },
+    where: { userId },
     orderBy: { date: "desc" },
     take: 10,
   });
@@ -71,8 +78,9 @@ export async function getRecentFeedback(key: UserKey) {
 export async function getRecentScenes(key: UserKey): Promise<string[]> {
   if (!isDatabaseConfigured()) return [];
   const prisma = getPrisma();
+  const userId = await userIdOf(key);
   const rows = await prisma.dailyLesson.findMany({
-    where: { userId: key },
+    where: { userId },
     orderBy: { date: "desc" },
     take: 6,
   });
@@ -113,11 +121,17 @@ async function createLessonFor(
 
   if (isDatabaseConfigured()) {
     const prisma = getPrisma();
+    const userId = await userIdOf(key);
     await prisma.dailyLesson.upsert({
-      where: { userId_date: { userId: key, date } },
-      update: { payload: payload as unknown as Prisma.InputJsonValue, scene: payload.scene, title: payload.title, dayIndex },
+      where: { userId_date: { userId, date } },
+      update: {
+        payload: payload as unknown as Prisma.InputJsonValue,
+        scene: payload.scene,
+        title: payload.title,
+        dayIndex,
+      },
       create: {
-        userId: key,
+        userId,
         date,
         dayIndex,
         scene: payload.scene,
@@ -126,32 +140,46 @@ async function createLessonFor(
         payload: payload as unknown as Prisma.InputJsonValue,
       },
     });
-    await seedWords(key, payload);
+    await seedWords(userId, payload);
   }
 
   return payload;
 }
 
-async function seedWords(key: UserKey, payload: LessonPayload) {
+async function seedWords(userId: string, payload: LessonPayload) {
   const prisma = getPrisma();
   const tomorrow = addDays(dayKey(), 1);
   const entries = [
-    ...payload.words.map((w) => ({ word: w.word, phonetic: w.phonetic ?? "", pos: w.pos ?? "", meaning: w.meaning ?? "", example: w.example ?? "", exampleCn: w.exampleCn ?? "" })),
-    ...payload.reviewSentences.map((s) => ({ word: s.en, phonetic: "", pos: "句子", meaning: s.cn, example: s.source ? `场景：${s.source}` : "", exampleCn: "" })),
+    ...payload.words.map((w) => ({
+      word: w.word,
+      phonetic: w.phonetic ?? "",
+      pos: w.pos ?? "",
+      meaning: w.meaning ?? "",
+      example: w.example ?? "",
+      exampleCn: w.exampleCn ?? "",
+    })),
+    ...payload.reviewSentences.map((s) => ({
+      word: s.en,
+      phonetic: "",
+      pos: "句子",
+      meaning: s.cn,
+      example: s.source ? `场景：${s.source}` : "",
+      exampleCn: "",
+    })),
   ];
   for (const item of entries) {
     if (!item.word) continue;
     await prisma.wordProgress.upsert({
-      where: { userId_word: { userId: key, word: item.word } },
+      where: { userId_word: { userId, word: item.word } },
       update: {},
       create: {
-        userId: key,
+        userId,
         word: item.word,
-        phonetic: item.phonetic ?? "",
-        pos: item.pos ?? "",
-        meaning: item.meaning ?? "",
-        example: item.example ?? "",
-        exampleCn: item.exampleCn ?? "",
+        phonetic: item.phonetic,
+        pos: item.pos,
+        meaning: item.meaning,
+        example: item.example,
+        exampleCn: item.exampleCn,
         scene: payload.scene,
         box: 1,
         hits: 0,
@@ -165,9 +193,10 @@ async function seedWords(key: UserKey, payload: LessonPayload) {
 export async function getDueWords(key: UserKey, limit = 20): Promise<ReviewWord[]> {
   if (!isDatabaseConfigured()) return [];
   const prisma = getPrisma();
+  const userId = await userIdOf(key);
   const today = dayKey();
   const rows = await prisma.wordProgress.findMany({
-    where: { userId: key, graduated: false, dueDate: { lte: today } },
+    where: { userId, graduated: false, dueDate: { lte: today } },
     orderBy: [{ dueDate: "asc" }, { box: "asc" }],
     take: limit,
   });
@@ -193,19 +222,19 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
 
   if (isDatabaseConfigured()) {
     const prisma = getPrisma();
-    await ensureUser(key);
+    const userId = await userIdOf(key);
     const existing = await prisma.dailyLesson.findUnique({
-      where: { userId_date: { userId: key, date: today } },
+      where: { userId_date: { userId, date: today } },
     });
     if (existing) {
       lesson = existing.payload as unknown as LessonPayload;
       dayIndex = existing.dayIndex;
       // 只保留当天内容：清掉更早的课程内容，节省免费额度
       await prisma.dailyLesson.deleteMany({
-        where: { userId: key, date: { lt: today } },
+        where: { userId, date: { lt: today } },
       });
     } else {
-      const count = await prisma.dailyLesson.count({ where: { userId: key } });
+      const count = await prisma.dailyLesson.count({ where: { userId } });
       dayIndex = count + 1;
       lesson = await createLessonFor(key, today, dayIndex);
     }
@@ -227,15 +256,16 @@ export async function getStats(key: UserKey) {
   };
   if (!isDatabaseConfigured()) return empty;
   const prisma = getPrisma();
+  const userId = await userIdOf(key);
   const today = dayKey();
 
   const feedbacks = await prisma.feedback.findMany({
-    where: { userId: key },
+    where: { userId },
     orderBy: { date: "desc" },
     take: 60,
   });
   const wordRows = await prisma.wordProgress.findMany({
-    where: { userId: key },
+    where: { userId },
     select: { graduated: true, hits: true, dueDate: true },
   });
 
@@ -261,8 +291,9 @@ export async function getStats(key: UserKey) {
 export async function gradeWord(key: UserKey, word: string, result: GradeResult) {
   if (!isDatabaseConfigured()) return null;
   const prisma = getPrisma();
+  const userId = await userIdOf(key);
   const row = await prisma.wordProgress.findUnique({
-    where: { userId_word: { userId: key, word } },
+    where: { userId_word: { userId, word } },
   });
   if (!row) return null;
 
@@ -284,7 +315,7 @@ export async function gradeWord(key: UserKey, word: string, result: GradeResult)
 
   await prisma.reviewEvent.create({
     data: {
-      userId: key,
+      userId,
       word,
       result,
       boxBefore: row.box,
@@ -309,17 +340,19 @@ export async function saveFeedback(
 ) {
   if (!isDatabaseConfigured()) return;
   const prisma = getPrisma();
+  const userId = await userIdOf(key);
   const today = dayKey();
   await prisma.feedback.upsert({
-    where: { userId_date: { userId: key, date: today } },
+    where: { userId_date: { userId, date: today } },
     update: { shadowing, reading, note: note.slice(0, 500) },
-    create: { userId: key, date: today, shadowing, reading, note: note.slice(0, 500) },
+    create: { userId, date: today, shadowing, reading, note: note.slice(0, 500) },
   });
 }
 
 export async function buildTomorrowLesson(key: UserKey): Promise<LessonPayload | null> {
   if (!isDatabaseConfigured()) return null;
   const tomorrow = addDays(dayKey(), 1);
-  const count = await getPrisma().dailyLesson.count({ where: { userId: key } });
+  const userId = await userIdOf(key);
+  const count = await getPrisma().dailyLesson.count({ where: { userId } });
   return createLessonFor(key, tomorrow, count + 1);
 }

@@ -10,18 +10,39 @@ function loadEnvFile() {
   if (!existsSync(file)) return {};
   const out = {};
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (!match || line.trim().startsWith('#')) continue;
-    let value = match[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const rest = trimmed.slice(eq + 1).trim();
+    let value;
+    if (rest.startsWith('"') || rest.startsWith("'")) {
+      const quote = rest[0];
+      const end = rest.indexOf(quote, 1);
+      value = end > 0 ? rest.slice(1, end) : rest.slice(1);
+    } else {
+      const hash = rest.indexOf(' #');
+      value = hash >= 0 ? rest.slice(0, hash).trim() : rest;
     }
-    out[match[1]] = value;
+    if (value) out[key] = value;
   }
   return out;
 }
 
+// Neon 的 direct 连接串 = pooled 连接串去掉主机名里的 -pooler
+function deriveDirect(url) {
+  const at = url.lastIndexOf('@');
+  if (at < 0) return url;
+  const head = url.slice(0, at + 1);
+  const tail = url.slice(at + 1);
+  return head + tail.replace('-pooler.', '.');
+}
 const env = { ...process.env, ...loadEnvFile() };
+if (env.DATABASE_URL && (!env.DIRECT_URL || /USER:PASSWORD|ep-xxx/i.test(env.DIRECT_URL))) {
+  env.DIRECT_URL = deriveDirect(env.DATABASE_URL);
+  console.log('DIRECT_URL 未填写，已从 DATABASE_URL 推导：' + env.DIRECT_URL.replace(/\/\/[^@]+@/, '//***@'));
+}
 const token = env.VERCEL_TOKEN;
 if (!token) {
   console.error('缺少 VERCEL_TOKEN（vercel.com/account/tokens 创建，Scope 选 teefsjiang-5506）');
