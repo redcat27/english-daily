@@ -40,6 +40,7 @@ test("iPhone words, dialogue and full article speak inside the click without the
   await page.route("**/api/tts", async (route) => { requests++; await route.fulfill({ status: 502, body: "unavailable" }); });
   await page.goto("/");
   const word = page.locator(".word").first();
+  await word.locator(".word-top").click();
   await word.getByRole("button", { name: "朗读", exact: true }).click();
   await expect(word.getByRole("button", { name: "停止朗读" })).toBeVisible();
   const line = page.locator(".line").first();
@@ -64,6 +65,7 @@ test("iPhone speech rejection shows a recoverable error and an explicit new-gest
   await page.goto("/");
   await page.evaluate(() => { Reflect.get(window, "__audioTest").failNext = true; });
   const word = page.locator(".word").first();
+  await word.locator(".word-top").click();
   await word.getByRole("button", { name: "朗读", exact: true }).click();
   await expect(word.getByRole("status")).toContainText("未能播放");
   await word.getByRole("button", { name: "使用系统朗读" }).click();
@@ -76,11 +78,13 @@ test("desktop cloud failure offers direct system speech and remembers the unavai
   await page.route("**/api/tts", async (route) => { requests++; await route.fulfill({ status: 502, contentType: "application/json", body: "{}" }); });
   await page.goto("/");
   const word = page.locator(".word").first();
+  await word.locator(".word-top").click();
   await word.getByRole("button", { name: "朗读", exact: true }).click();
   await expect(word.getByRole("status")).toContainText("自然人声暂不可用");
   await word.getByRole("button", { name: "使用系统朗读" }).click();
   await expect(word.getByRole("button", { name: "停止朗读" })).toBeVisible();
   const next = page.locator(".word").nth(1);
+  await next.locator(".word-top").click();
   await next.getByRole("button", { name: "朗读", exact: true }).click();
   await expect(next.getByRole("button", { name: "停止朗读" })).toBeVisible();
   expect(requests).toBe(1);
@@ -91,6 +95,7 @@ test("desktop blocked mp3 playback exposes the error rather than swallowing play
   await page.route("**/api/tts", async (route) => route.fulfill({ status: 200, contentType: "audio/mpeg", body: Buffer.from("test-audio") }));
   await page.goto("/");
   const word = page.locator(".word").first();
+  await word.locator(".word-top").click();
   await word.getByRole("button", { name: "朗读", exact: true }).click();
   await expect(word.getByRole("status")).toContainText("播放未启动");
   await word.getByRole("button", { name: "使用系统朗读" }).click();
