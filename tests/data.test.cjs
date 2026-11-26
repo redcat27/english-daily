@@ -233,6 +233,25 @@ test('learning dates switch at midnight in Asia/Shanghai', () => {
   assert.equal(data.dayKey(new Date('2026-11-26T16:00:00Z')).toISOString().slice(0, 10), '2026-11-27');
 });
 
+test('new lesson sentences enter review tomorrow and are returned only when due', async (context) => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-26T12:00:00Z').getTime() });
+  const rows = [{ id: 'lesson-1', userId: 'user-1', date: new Date('2026-11-26'), dayIndex: 1, payload: lessonModule.FALLBACK_LESSON }];
+  const prisma = progressDatabase(rows);
+  const pool = [];
+  prisma.wordProgress.upsert = async ({ create }) => {
+    if (!pool.some((row) => row.word === create.word)) pool.push(create);
+  };
+  prisma.wordProgress.findMany = async ({ where, take }) => pool.filter((row) => !where.dueDate || row.dueDate <= where.dueDate.lte).slice(0, take);
+  const first = await data.getTodayData('teefs');
+  assert.equal(first.review.length, 0);
+  assert.equal(pool.filter((row) => row.pos === '句子').length, 3);
+  context.mock.timers.tick(86400000);
+  const due = await data.getDueWords('teefs');
+  assert.equal(due.filter((row) => row.pos === '句子').length, 3);
+  assert.equal(due.filter((row) => row.pos !== '句子').length, 8);
+  assert.equal(due.find((row) => row.pos === '句子').word, rows[0].payload.reviewSentences[0].en);
+});
+
 test('only one concurrent request can reclaim a failed generation task', async () => {
   const prisma = database();
   const old = { id: 'task-1', status: 'failed', startedAt: new Date(0), summary: '', error: '' };

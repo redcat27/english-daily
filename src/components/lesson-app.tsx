@@ -144,28 +144,27 @@ function ReviewCard({
   item,
   index,
   onGrade,
-  sentence,
 }: {
   item: LocalReview;
   index: number;
   onGrade: (key: string, result: "know" | "forgot") => void;
-  sentence?: { en: string; cn: string; source: string };
 }) {
   const [revealed, setRevealed] = useState(false);
-  const head = sentence?.en ?? item.word;
+  const sentence = item.pos === "句子";
+  const head = item.word;
   const phonetic = sentence ? "" : item.phonetic;
-  const meaning = sentence?.cn ?? item.meaning;
+  const meaning = item.meaning;
   const example = sentence ? "" : item.example;
   const exampleCn = sentence ? "" : item.exampleCn;
-  const key = sentence?.en ?? item.word;
+  const key = item.word;
 
   return (
     <div className={"card rcard" + (revealed ? " revealed" : "")}>
       <div className="rhead">
-        <span className="box-chip">{sentence ? "句子卡" : dueLabel(item)}</span>
+        <span className="box-chip">{sentence ? "句子卡 · " : ""}{dueLabel(item)}</span>
         <span>第 {index + 1} 张</span>
         <span style={{ marginLeft: "auto" }}>
-          {!sentence && item.hits ? `已连续记住 ${item.hits} 次` : ""}
+          {item.hits ? `已连续记住 ${item.hits} 次` : ""}
         </span>
       </div>
       <div className="w">{head}</div>
@@ -240,7 +239,6 @@ export default function LessonApp({ user, data }: Props) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [tab, setTab] = useState<"word" | "sentence">("word");
-  const [sentenceGrades, setSentenceGrades] = useState<Record<string, "know" | "forgot">>({});
   const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
@@ -356,7 +354,6 @@ export default function LessonApp({ user, data }: Props) {
       if (!response.ok || !payload.next) throw new Error("复习结果未保存");
       if (payload?.next) {
         const next = payload.next;
-        setSentenceGrades((prev) => ({ ...prev, [key]: result }));
         setReview((prev) =>
           prev.map((item) =>
             item.word === key
@@ -458,6 +455,8 @@ export default function LessonApp({ user, data }: Props) {
   };
 
   const gradedCount = review.filter((item) => item.graded).length;
+  const visibleReview = review.filter((item) => (item.pos === "句子") === (tab === "sentence"));
+  const visibleGradedCount = visibleReview.filter((item) => item.graded).length;
   const progressSteps = [
     gradedCount >= 4,
     doneDialogue,
@@ -526,7 +525,7 @@ export default function LessonApp({ user, data }: Props) {
           <div className="sec-head">
             <span className="n">01</span>
             <h2>今日复习</h2>
-            <span className="hint">{gradedCount} / {review.length} 已复习</span>
+            <span className="hint">{visibleGradedCount} / {visibleReview.length} 已复习</span>
           </div>
           <div className="tabs">
             <button className={"rtab" + (tab === "word" ? " active" : "")} onClick={() => setTab("word")}>单词卡</button>
@@ -534,8 +533,8 @@ export default function LessonApp({ user, data }: Props) {
           </div>
           {tab === "word" ? (
             <div>
-              {review.length ? (
-                review.map((item, index) => (
+              {visibleReview.length ? (
+                visibleReview.map((item, index) => (
                   <ReviewCard key={item.word} item={item} index={index} onGrade={onGrade} />
                 ))
               ) : (
@@ -546,19 +545,18 @@ export default function LessonApp({ user, data }: Props) {
             </div>
           ) : (
             <div>
-              {(lesson?.reviewSentences ?? []).length ? (
-                lesson!.reviewSentences.map((sentence, index) => (
+              {visibleReview.length ? (
+                visibleReview.map((item, index) => (
                   <ReviewCard
-                    key={sentence.en}
-                    item={{ ...blankReview, word: sentence.en, meaning: sentence.cn, graded: sentenceGrades[sentence.en] }}
+                    key={item.word}
+                    item={item}
                     index={index}
-                    sentence={sentence}
                     onGrade={onGrade}
                   />
                 ))
               ) : (
                 <div className="card" style={{ padding: 14, fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
-                  今天还没有需要记的整句。
+                  今天没有到期的复习句子。当天课程的新句子会从明天开始按记忆曲线安排复习。
                 </div>
               )}
             </div>
@@ -794,20 +792,6 @@ export default function LessonApp({ user, data }: Props) {
     </>
   );
 }
-
-const blankReview: LocalReview = {
-  word: "",
-  phonetic: "",
-  pos: "",
-  meaning: "",
-  example: "",
-  exampleCn: "",
-  box: 1,
-  hits: 0,
-  misses: 0,
-  graduated: false,
-  dueDate: "",
-};
 
 function WordRow({ item, index }: { item: LessonPayload["words"][number]; index: number }) {
   const [open, setOpen] = useState(false);
