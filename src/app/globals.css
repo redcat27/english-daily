@@ -211,3 +211,20 @@
   .proto-note { margin-top: 28px; padding: 12px 14px; border: 1px dashed var(--color-border-strong); border-radius: var(--radius-lg); font-size: var(--text-xs); color: var(--color-text-faint); line-height: 1.7; }
   .proto-note b { color: var(--color-text-muted); }
   .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ===== 逐段喇叭 + 例句喇叭 + 语速控制 ===== */
+.para-en { display: flex; align-items: flex-start; gap: 10px; }
+.para-en .en { flex: 1; min-width: 0; }
+.para-en .speak { width: 34px; height: 34px; }
+.eg-row { display: flex; align-items: flex-start; gap: 10px; }
+.eg-row > span { flex: 1; min-width: 0; }
+.eg-row .speak { width: 34px; height: 34px; margin-top: -4px; }
+.speed-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.speed-label { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
+.speed-range { flex: 1; min-width: 0; -webkit-appearance: none; appearance: none; background: transparent; height: 28px; }
+.speed-range::-webkit-slider-runnable-track { height: 4px; background: var(--color-surface-dynamic); border-radius: 999px; }
+.speed-range::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 999px; background: var(--color-primary); margin-top: -8px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+.speed-range::-moz-range-track { height: 4px; background: var(--color-surface-dynamic); border-radius: 999px; }
+.speed-range::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 999px; background: var(--color-primary); }
+.speed-value { font-size: var(--text-xs); color: var(--color-text); min-width: 34px; text-align: right; }
+.speed-reset { cursor: pointer; }

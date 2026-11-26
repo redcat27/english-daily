@@ -6,7 +6,8 @@ import type { Learner } from "@/lib/users";
 import type { ReviewWord, TodayData } from "@/lib/data";
 import type { LessonPayload } from "@/lib/lesson";
 import { startPronunciation, primePronunciations, onAudioSource, type AudioSource, type PlaybackState } from "@/lib/pronunciation";
-import { cacheGet as ttsCacheGet, cachePut as ttsCachePut } from "@/lib/audio-cache";
+import { cacheGet as ttsCacheGet, cachePut as ttsCachePut, pruneAudioCache } from "@/lib/audio-cache";
+import { useSpeed, setSpeed, initSpeed, getSpeed, MIN_SPEED, MAX_SPEED } from "@/lib/speed";
 
 type Props = {
   user: Learner | null;
@@ -18,6 +19,7 @@ const INTERVALS = [1, 2, 4, 7, 15, 30];
 /* ---------------- 小组件 ---------------- */
 
 function SpeakerButton({ text, label }: { text: string; label?: string }) {
+  const speed = useSpeed();
   const [state, setState] = useState<PlaybackState>("idle");
   const [error, setError] = useState("");
   const stop = useRef<(() => void) | null>(null);
@@ -39,6 +41,7 @@ function SpeakerButton({ text, label }: { text: string; label?: string }) {
     setError("");
     stop.current = startPronunciation(text, {
       forceSystem: forceSystem || state === "error",
+      speed,
       cache: { read: ttsCacheGet, write: ttsCachePut },
       onState: (next, message) => { setState(next); setError(message || ""); },
     });
@@ -203,28 +206,41 @@ export default function LessonApp({ user, data }: Props) {
   const [tab, setTab] = useState<"word" | "sentence">("word");
   const [audioSource, setAudioSource] = useState<AudioSource>("unknown");
   const [prefetch, setPrefetch] = useState({ loaded: 0, total: 0 });
+  const speed = useSpeed();
   useEffect(() => onAudioSource((source) => setAudioSource(source)), []);
+  useEffect(() => {
+    initSpeed(data?.audioDefaultSpeed ?? 1);
+  }, [data?.audioDefaultSpeed]);
 
   // 提前把本页要朗读的音频备好：iPhone 点击时才能同步播放模型音色
   useEffect(() => {
     if (!lesson) return;
+    const currentSpeed = getSpeed();
     // 必须和页面上每个喇叭按钮的文本完全一致，否则命中不了内存缓存（iOS 会回落系统音）
     const texts = [
       ...lesson.words.map((word) => word.word),
+      ...lesson.words.map((word) => word.example),
       ...lesson.dialogue.lines.map((line) => line.en),
       ...lesson.article.paras.map((para) => para.en),
-      // 短文的「通读全文」按钮用的是整篇拼接后的字符串
-      ...(lesson.article.paras.length ? [lesson.article.paras.map((para) => para.en).join(" ")] : []),
       ...lesson.reviewSentences.map((sentence) => sentence.en),
       // 复习区词条（来自数据库的到期词）
       ...review.map((item) => item.word),
     ];
+    // 历史音频不保存：只保留当天与第二天要用的音频
+    const tomorrow = data?.nextLesson?.payload;
+    const keep = [
+      ...texts,
+      ...(tomorrow ? [...tomorrow.words.map((word) => word.word), ...tomorrow.words.map((word) => word.example),
+        ...tomorrow.dialogue.lines.map((line) => line.en), ...tomorrow.article.paras.map((para) => para.en),
+        ...tomorrow.reviewSentences.map((sentence) => sentence.en)] : []),
+    ];
+    void pruneAudioCache(keep, currentSpeed);
     const timer = setTimeout(() => {
       setPrefetch({ loaded: 0, total: texts.length });
-      void primePronunciations(texts, (loaded, total) => setPrefetch({ loaded, total }));
+      void primePronunciations(texts, currentSpeed, (loaded, total) => setPrefetch({ loaded, total }));
     }, 600);
     return () => clearTimeout(timer);
-  }, [lesson, review]);
+  }, [lesson, review, data?.nextLesson, speed]);
 
   const [theme, setTheme] = useState("dark");
 
@@ -504,7 +520,22 @@ export default function LessonApp({ user, data }: Props) {
           {prefetch.total ? ` ${prefetch.loaded}/${prefetch.total}` : ""}
         </span>
           </div>
-          <div className="progress">
+          <div className="speed-row">
+    <span className="speed-label">🔊 语速</span>
+    <input
+      type="range"
+      className="speed-range"
+      min={MIN_SPEED}
+      max={MAX_SPEED}
+      step={0.05}
+      value={speed}
+      onChange={(event) => setSpeed(Number(event.target.value))}
+      aria-label="播报语速"
+    />
+    <span className="speed-value mono">{speed.toFixed(2)}</span>
+    <button className="chip speed-reset" onClick={() => setSpeed(data?.audioDefaultSpeed ?? 1)}>默认</button>
+  </div>
+  <div className="progress">
             <div className="progress-bar"><i style={{ width: progressPct + "%" }} /></div>
             <div className="progress-label">
               <span>今日进度 {progressDone} / {progressSteps.length}</span>
@@ -650,12 +681,14 @@ export default function LessonApp({ user, data }: Props) {
             <h3>{lesson?.article.title}</h3>
             {(lesson?.article.paras ?? []).map((para, index) => (
               <div className="para" key={index}>
-                <div className="en">{para.en}</div>
+                <div className="para-en">
+                  <span className="en">{para.en}</span>
+                  <SpeakerButton text={para.en} label={`朗读第 ${index + 1} 段`} />
+                </div>
                 <div className="cn">{para.cn}</div>
               </div>
             ))}
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-              <SpeakerButton text={(lesson?.article.paras ?? []).map((p) => p.en).join(" ")} label="通读全文" />
               <button
                 className={"btn" + (doneArticle ? "" : " primary")}
                 onClick={() => setDoneArticle((value) => !value)}
@@ -806,7 +839,10 @@ function WordRow({ item, index }: { item: LessonPayload["words"][number]; index:
       </button>
       <div className="word-detail">
         <div className="eg">
-          {item.example}
+          <div className="eg-row">
+            <span>{item.example}</span>
+            <SpeakerButton text={item.example} label="朗读例句" />
+          </div>
           <div className="cn">{item.exampleCn}</div>
         </div>
         {item.tip ? <div className="tip">💡 {item.tip}</div> : null}

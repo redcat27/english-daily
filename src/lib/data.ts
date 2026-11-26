@@ -24,6 +24,8 @@ export type ReviewWord = {
 export type TodayData = {
   lesson: LessonPayload;
   dayIndex: number;
+  /** 默认播报语速（用户可在页面上调整） */
+  audioDefaultSpeed: number;
   lessonId?: string;
   nextLesson?: ReturnType<typeof previewLesson>;
   lessonWarning?: string;
@@ -347,6 +349,23 @@ export async function getNextLesson(key: UserKey, source: { dayIndex: number; da
   return row?.dayIndex === source.dayIndex + 1 && isCompleteLesson(row.payload) ? row : null;
 }
 
+
+/**
+ * 存储策略：情景对话、今日短文这类"当天内容"只保留当天与第二天。
+ * 更早的课程只留一个极小的占位（保留 Day 序号与场景列），不再保存对话/短文正文，
+ * 历史学习数据只以单词进度（word_progress）与反馈（feedbacks）形式保留纯文本。
+ */
+export async function pruneOldLessons(userId: string) {
+  if (!isDatabaseConfigured()) return 0;
+  const prisma = getPrisma();
+  const cutoff = addDays(dayKey(), 1); // 当天与第二天都保留
+  const result = await prisma.dailyLesson.updateMany({
+    where: { userId, dayIndex: { gt: 0 }, date: { lt: cutoff } },
+    data: { payload: { archived: true } as unknown as Prisma.InputJsonValue },
+  });
+  return result.count;
+}
+
 export async function getTodayData(key: UserKey): Promise<TodayData> {
   let lesson = FALLBACK_LESSON;
   let dayIndex = 1;
@@ -356,6 +375,9 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
   let nextLesson: TodayData["nextLesson"];
 
   if (isDatabaseConfigured()) {
+    // 只保留当天与第二天的课程内容，历史对话/短文不再保存
+    const userId = await userIdOf(key);
+    await pruneOldLessons(userId);
     const existing = await getCurrentLesson(key);
     if (existing) {
       lesson = existing.payload as unknown as LessonPayload;
@@ -366,7 +388,6 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
       const next = await getNextLesson(key, existing);
       if (next) nextLesson = previewLesson(next);
     } else {
-      const userId = await userIdOf(key);
       const latest = await getPrisma().dailyLesson.findFirst({ where: { userId, dayIndex: { gt: 0 }, date: { lt: dayKey() } }, orderBy: { date: "desc" } });
       dayIndex = latest?.dayIndex ?? 1;
       lessonPending = true;
@@ -376,7 +397,8 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
 
   const review = await getDueWords(key, 20);
   const stats = await getStats(key);
-  return { lesson, dayIndex, lessonId, nextLesson, lessonWarning, lessonPending, review, stats };
+  const audioDefaultSpeed = Math.max(0.6, Math.min(1.4, Number(process.env.MINIMAX_VOICE_SPEED) || 1));
+  return { lesson, dayIndex, audioDefaultSpeed, lessonId, nextLesson, lessonWarning, lessonPending, review, stats };
 }
 
 export async function getStats(key: UserKey) {

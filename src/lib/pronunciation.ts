@@ -1,4 +1,4 @@
-import { cacheGet, cachePut, memoryGet, prefetchAudio } from "./audio-cache";
+import { audioKey, cacheGet, cachePut, memoryGet, prefetchAudio } from "./audio-cache";
 
 export type PlaybackState = "loading" | "playing" | "idle" | "error";
 export type AudioSource = "model" | "system" | "unknown";
@@ -6,6 +6,7 @@ export type AudioSource = "model" | "system" | "unknown";
 type AudioCache = { read: (text: string) => Promise<Blob | null>; write?: (text: string, blob: Blob) => Promise<void> };
 type Options = {
   forceSystem?: boolean;
+  speed?: number;
   cache?: AudioCache;
   onState: (state: PlaybackState, message?: string) => void;
   onSource?: (source: AudioSource) => void;
@@ -40,8 +41,12 @@ export function stopPronunciation() {
 }
 
 /** 预取本页要朗读的文本，让 iOS 点击时能同步播放模型音色 */
-export function primePronunciations(texts: string[], onProgress?: (loaded: number, total: number) => void) {
-  return prefetchAudio(texts, { concurrency: 4, onDone: onProgress });
+export function primePronunciations(
+  texts: string[],
+  speed = 1,
+  onProgress?: (loaded: number, total: number) => void
+) {
+  return prefetchAudio(texts, { concurrency: 4, speed, onDone: onProgress });
 }
 
 // iOS 对游离的 Audio 元素很挑：必须挂在文档里，而且要复用同一个元素，
@@ -124,7 +129,8 @@ export function startPronunciation(text: string, options: Options): () => void {
       const utterance = new window.SpeechSynthesisUtterance(text.trim());
       playback.utterance = utterance;
       utterance.lang = "en-US";
-      utterance.rate = 0.95;
+      // 系统朗读的语速和模型语速保持大致一致
+      utterance.rate = Math.max(0.5, Math.min(1.6, speed * 0.95));
       utterance.volume = 1;
       const voices = speech.getVoices().filter((voice) => /^en[-_]/i.test(voice.lang));
       const voice =
@@ -166,8 +172,11 @@ export function startPronunciation(text: string, options: Options): () => void {
     return () => playback.stop();
   }
 
+  const speed = options.speed ?? 1;
+  const cacheKey = audioKey(text, speed);
+
   // 1) 内存里已有模型音频：直接同步播放（iOS 也能用上 MiniMax 音色）
-  const primed = memoryGet(text.trim());
+  const primed = memoryGet(cacheKey);
   if (!options.forceSystem && primed) {
     options.onSource?.("model");
     notifySource("model");
@@ -192,7 +201,7 @@ export function startPronunciation(text: string, options: Options): () => void {
     options.onSource?.("system");
     notifySource("system");
     speakNow("system");
-    void prefetchAudio([text], { concurrency: 1 });
+    void prefetchAudio([text], { concurrency: 1, speed });
     return () => playback.stop();
   }
 
@@ -207,13 +216,13 @@ export function startPronunciation(text: string, options: Options): () => void {
   cleanup = () => abort.abort();
   void (async () => {
     try {
-      let blob = (await options.cache?.read(text).catch(() => null)) ?? memoryGet(text.trim()) ?? null;
+      let blob = (await options.cache?.read(cacheKey).catch(() => null)) ?? memoryGet(cacheKey) ?? null;
       if (cancelled) return;
       if (!blob) {
         const response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, speed }),
           signal: AbortSignal.any([abort.signal, AbortSignal.timeout(10000)]),
         });
         if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) {
@@ -223,7 +232,7 @@ export function startPronunciation(text: string, options: Options): () => void {
         }
         blob = await response.blob();
         if (!blob.size) throw new Error("empty audio");
-        if (options.cache?.write) void options.cache.write(text, blob).catch(() => {});
+        if (options.cache?.write) void options.cache.write(cacheKey, blob).catch(() => {});
       }
       if (cancelled) return;
       options.onSource?.("model");

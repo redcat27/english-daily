@@ -2,11 +2,18 @@
 //
 // 为什么需要内存层：iOS Safari 要求 play() 在用户点击的同步调用栈里执行，
 // 一旦 await 网络，播放会被系统拒绝。所以要在用户点之前就把音频备好。
+//
+// 存储策略：只保留「当天要学的」和「第二天」的音频，历史音频一律不留。
 
 const DB_NAME = "english-tts";
 const STORE = "audio";
 
 const memory = new Map<string, Blob>();
+
+/** 语速不同则音频不同，缓存键必须带语速 */
+export function audioKey(text: string, speed: number): string {
+  return `${speed.toFixed(2)}|${text.trim()}`;
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -60,12 +67,42 @@ export async function cachePut(key: string, blob: Blob): Promise<void> {
   }
 }
 
+/** 删除不在保留清单里的音频（历史音频不保存） */
+export async function pruneAudioCache(keepTexts: string[], speed: number): Promise<number> {
+  const keep = new Set(keepTexts.map((text) => audioKey(text, speed)));
+  // 语速变了，旧语速的音频也不再需要
+  for (const key of Array.from(memory.keys())) {
+    if (!keep.has(key)) memory.delete(key);
+  }
+  try {
+    const db = await openDb();
+    const keys = await new Promise<string[]>((resolve) => {
+      const request = db.transaction(STORE, "readonly").objectStore(STORE).getAllKeys();
+      request.onsuccess = () => resolve((request.result as string[]) ?? []);
+      request.onerror = () => resolve([]);
+    });
+    const stale = keys.filter((key) => !keep.has(key));
+    if (!stale.length) return 0;
+    await new Promise<void>((resolve) => {
+      const transaction = db.transaction(STORE, "readwrite");
+      const store = transaction.objectStore(STORE);
+      for (const key of stale) store.delete(key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+    });
+    return stale.length;
+  } catch {
+    return 0;
+  }
+}
+
 /** 预取一批文本的模型音频（并发受控），用于点击前备好 */
 export async function prefetchAudio(
   texts: string[],
-  options: { concurrency?: number; onDone?: (loaded: number, total: number) => void } = {}
+  options: { concurrency?: number; speed?: number; onDone?: (loaded: number, total: number) => void } = {}
 ): Promise<number> {
-  const concurrency = options.concurrency ?? 3;
+  const concurrency = options.concurrency ?? 4;
+  const speed = options.speed ?? 1;
   const unique = Array.from(new Set(texts.map((t) => t.trim()).filter(Boolean)));
   let loaded = 0;
   let index = 0;
@@ -74,13 +111,14 @@ export async function prefetchAudio(
     while (index < unique.length) {
       const text = unique[index];
       index += 1;
-      if (memory.has(text)) {
+      const key = audioKey(text, speed);
+      if (memory.has(key)) {
         loaded += 1;
         options.onDone?.(loaded, unique.length);
         continue;
       }
       try {
-        const cached = await cacheGet(text);
+        const cached = await cacheGet(key);
         if (cached) {
           loaded += 1;
           options.onDone?.(loaded, unique.length);
@@ -89,12 +127,12 @@ export async function prefetchAudio(
         const response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-          signal: AbortSignal.timeout(20000),
+          body: JSON.stringify({ text, speed }),
+          signal: AbortSignal.timeout(25000),
         });
         if (response.ok && response.headers.get("content-type")?.startsWith("audio/")) {
           const blob = await response.blob();
-          if (blob.size) await cachePut(text, blob);
+          if (blob.size) await cachePut(key, blob);
         }
       } catch {
         /* 单条失败不影响其他 */

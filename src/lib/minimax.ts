@@ -189,7 +189,7 @@ export function parseJsonLoose(raw: string): unknown {
   return null;
 }
 
-export async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; mime: string } | null> {
+export async function synthesizeSpeech(text: string, speed?: number): Promise<{ audio: Buffer; mime: string } | null> {
   if (!isMiniMaxConfigured() || !text) return null;
 
   const response = await fetch(withGroupId(TTS_ENDPOINT), {
@@ -202,7 +202,7 @@ export async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; m
       stream: false,
       voice_setting: {
         voice_id: TTS_VOICE,
-        speed: TTS_SPEED,
+        speed: speed ?? TTS_SPEED,
         vol: 1,
         pitch: 0,
       },
@@ -227,6 +227,7 @@ export async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; m
   const audio = isHex ? Buffer.from(hex, "hex") : Buffer.from(hex, "base64");
   return { audio, mime: "audio/mpeg" };
 }
+
 
 
 
