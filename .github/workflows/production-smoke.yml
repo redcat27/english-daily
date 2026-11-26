@@ -53,5 +53,10 @@ jobs:
           if state['status'] == 'done':
               cached = json.loads(call('/api/next-preview', 200, {}))
               assert cached.get('tomorrow', {}).get('words', 0) > 0
+          call('/api/session', 200, {'user': 'groot'})
+          page = call('/', 200).decode()
+          assert '今日课程暂未生成' not in page, 'All model candidates failed in production'
+          assert page.count('class="word-en"') >= 4
+          print('PASS: production model generation and persisted learner lesson.', flush=True)
           print('PASS: production pages, session, validation, database reads and cached lesson.', flush=True)
           PY
