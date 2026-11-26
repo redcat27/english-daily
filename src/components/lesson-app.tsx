@@ -208,17 +208,23 @@ export default function LessonApp({ user, data }: Props) {
   // 提前把本页要朗读的音频备好：iPhone 点击时才能同步播放模型音色
   useEffect(() => {
     if (!lesson) return;
+    // 必须和页面上每个喇叭按钮的文本完全一致，否则命中不了内存缓存（iOS 会回落系统音）
     const texts = [
       ...lesson.words.map((word) => word.word),
       ...lesson.dialogue.lines.map((line) => line.en),
       ...lesson.article.paras.map((para) => para.en),
+      // 短文的「通读全文」按钮用的是整篇拼接后的字符串
+      ...(lesson.article.paras.length ? [lesson.article.paras.map((para) => para.en).join(" ")] : []),
+      ...lesson.reviewSentences.map((sentence) => sentence.en),
+      // 复习区词条（来自数据库的到期词）
+      ...review.map((item) => item.word),
     ];
     const timer = setTimeout(() => {
       setPrefetch({ loaded: 0, total: texts.length });
       void primePronunciations(texts, (loaded, total) => setPrefetch({ loaded, total }));
     }, 600);
     return () => clearTimeout(timer);
-  }, [lesson]);
+  }, [lesson, review]);
 
   const [theme, setTheme] = useState("dark");
 

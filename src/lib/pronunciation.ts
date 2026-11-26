@@ -41,7 +41,7 @@ export function stopPronunciation() {
 
 /** 预取本页要朗读的文本，让 iOS 点击时能同步播放模型音色 */
 export function primePronunciations(texts: string[], onProgress?: (loaded: number, total: number) => void) {
-  return prefetchAudio(texts, { concurrency: 3, onDone: onProgress });
+  return prefetchAudio(texts, { concurrency: 4, onDone: onProgress });
 }
 
 /** 播放已经取到手的模型音频（必须同步调用，才能保住 iOS 的用户手势） */
