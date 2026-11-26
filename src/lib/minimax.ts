@@ -49,14 +49,15 @@ const CHAT_TIMEOUT_MS = Number(process.env.MINIMAX_TIMEOUT_MS || 25000);
 
 export async function chatCompletion(
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  signal?: AbortSignal
 ): Promise<string> {
   if (!isMiniMaxConfigured()) throw new Error("MINIMAX_API_KEY 未配置");
 
   const response = await fetch(withGroupId(CHAT_ENDPOINT), {
     method: "POST",
     headers: authHeaders(),
-    signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(CHAT_TIMEOUT_MS)]) : AbortSignal.timeout(CHAT_TIMEOUT_MS),
     body: JSON.stringify({
       model: process.env.MINIMAX_CHAT_MODEL || "MiniMax-M2.5",
       messages: [

@@ -36,11 +36,12 @@ test('uses SenseNova deepseek-flash first with reasoning disabled and JSON outpu
 });
 
 for (const failure of ['rate limit', 'timeout', 'empty', 'invalid shape', 'truncated']) {
-  test(`falls back to MiniMax once after SenseNova ${failure}`, async () => {
+  test(`falls back to SenseNova Flash Lite once after DeepSeek ${failure}`, async () => {
     const { generateJson } = require('../src/lib/ai.ts');
     let calls = 0;
-    mock.method(globalThis, 'fetch', async () => {
+    mock.method(globalThis, 'fetch', async (url, options) => {
       calls++;
+      if (calls === 2) assert.equal(JSON.parse(options.body).model, 'sensenova-6.8-flash-lite');
       if (calls === 1) {
         if (failure === 'rate limit') return Response.json({ error: { code: 'RateLimit' } }, { status: 429 });
         if (failure === 'timeout') throw new DOMException('timed out', 'TimeoutError');
@@ -63,6 +64,17 @@ test('rejects MiniMax business errors even when HTTP status is 200', async () =>
   await assert.rejects(chatCompletion('JSON only', 'Return ok'), /2056/);
 });
 
+test('tries MiniMax only after both SenseNova models fail', async () => {
+  const { generateJson } = require('../src/lib/ai.ts');
+  const models = [];
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    models.push(JSON.parse(options.body).model);
+    return models.length < 3 ? Response.json({}, { status: 429 }) : completion('{"ok":true}');
+  });
+  assert.deepEqual(await generateJson('JSON only', 'Return ok', validate), { ok: true });
+  assert.deepEqual(models, ['deepseek-flash', 'sensenova-6.8-flash-lite', 'MiniMax-M2.5']);
+});
+
 test('reports total provider failure instead of returning empty or sample content', async () => {
   const { generateJson } = require('../src/lib/ai.ts');
   let calls = 0;
@@ -73,5 +85,5 @@ test('reports total provider failure instead of returning empty or sample conten
       : Response.json({ base_resp: { status_code: 2056, status_msg: 'quota exhausted' } });
   });
   await assert.rejects(generateJson('JSON only', 'Return ok', validate), /暂时不可用/);
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
 });
