@@ -93,7 +93,9 @@ curl -s -X POST https://english.lulunote.top/api/tts -H "Content-Type: applicati
 ### 生成状态与故障排查
 
 - `/api/feedback` 的 201 只说明反馈已保存。`/api/next-preview` 首次 POST 返回 202，GET 返回 `running` / `done` / `failed`，`done` 才表示课程已保存。
-- 当天课程使用 `POST /api/next-preview?day=today`，首屏本身不调用模型；后台完成后客户端自动刷新。`vercel.json` 将函数放在 `sin1`，避免数据库与模型请求跨美洲绕行。
+- 第一课使用 `POST /api/next-preview?day=today`，首屏本身不调用模型；已有可学习课程直接复用，跨天不自动生成。下一课必须有当前课开始日期之后的反馈，缺少时 POST 返回 409；生成成功后从明天起可学。Day 使用 `daily_lessons.dayIndex`，与反馈条数、日历天数分离；接口 `lesson` / `tomorrow` 摘要包含 `dayIndex`。旧任务跨午夜轮询按原任务日期对应的课程序列处理。
+- 2026-11-26：校正上线调试期间两位用户的现有课程为 Day 1；已存在的次日课程有反馈才编号为 Day 2，无反馈的旧测试预览保留内容并标记 `dayIndex=0`，不参与学习进度。未删除反馈、复习记录或课程内容；修复前快照保存在本地忽略目录 `.vercel/`。新逻辑停止按自然日删除课程。
+- `vercel.json` 将函数放在 `sin1`，避免数据库与模型请求跨美洲绕行。
 - 生成任务在 `english.generation_tasks`；单个候选最多尝试一次，共享 85 秒生成预算。五分钟仍未结束的任务视为僵死，可重试。
 - HTTP 200 也可能包含供应商业务错误。MiniMax `base_resp.status_code=2056` 表示 Token Plan 用量耗尽，不能通过延长超时修复。SenseNova `EndpointRPMExceeded` 表示该模型推理限流。
 - MiniMax TTS 目前同样受额度限制时，页面使用现有浏览器朗读降级；SenseNova 文本模型不会提供音频。

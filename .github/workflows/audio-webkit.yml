@@ -6,6 +6,10 @@ on:
     paths:
       - 'src/lib/pronunciation.ts'
       - 'src/components/lesson-app.tsx'
+      - 'src/lib/data.ts'
+      - 'src/app/api/next-preview/route.ts'
+      - 'src/app/page.tsx'
+      - 'tests/data.test.cjs'
       - 'tests/browser/**'
       - 'tests/pronunciation.test.cjs'
       - 'playwright.config.ts'

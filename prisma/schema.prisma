@@ -1,7 +1,7 @@
 // english-daily · Neon Postgres（复用现有库，独立 english schema）
 //
 // 存储策略（免费额度考虑）：
-// - daily_lessons：只保留「当天」内容，新的一天生成时清掉更早的当日内容。
+// - daily_lessons：保留课程序列；未推进时持续学习当前课，不按自然日清除。
 // - word_progress / review_events / feedbacks：长期保留，是 AI 迭代与记忆曲线的依据。
 // - TTS 音频不落库，缓存在浏览器 IndexedDB。
 
@@ -39,7 +39,7 @@ model DailyLesson {
   id        String   @id @default(cuid())
   userId    String
   date      DateTime @db.Date
-  dayIndex  Int
+  dayIndex  Int // 1 起的课程序号；0 仅用于保留旧版未经反馈确认的测试预览。
   scene     String   @db.VarChar(60)
   title     String   @db.VarChar(120)
   level     String   @db.VarChar(10)

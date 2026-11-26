@@ -229,7 +229,7 @@ export default function LessonApp({ user, data }: Props) {
   const [doneDialogue, setDoneDialogue] = useState(false);
   const [doneArticle, setDoneArticle] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [tomorrow, setTomorrow] = useState<{ scene: string; title: string; words: number } | null>(null);
+  const [tomorrow, setTomorrow] = useState<{ scene: string; title: string; words: number; dayIndex: number } | null>(null);
   const [generationMessage, setGenerationMessage] = useState("");
   const [todayMessage, setTodayMessage] = useState("");
   const [todayAttempt, setTodayAttempt] = useState(0);
@@ -421,7 +421,7 @@ export default function LessonApp({ user, data }: Props) {
           </div>
         ) : null}
         <div className="hero">
-          <div className="scene mono">Day {stats ? stats.totalDays + 1 : 1} · 场景：{lesson?.scene}</div>
+          <div className="scene mono">Day {data?.dayIndex ?? 1} · 场景：{lesson?.scene}</div>
           <h1>{lesson?.title}</h1>
           <div className="chips">
             <span className="chip"><b>{stats?.streak ?? 0}</b> 天连续</span>
@@ -648,7 +648,7 @@ export default function LessonApp({ user, data }: Props) {
             {tomorrow ? (
               <div style={{ marginTop: 14, padding: 12, borderRadius: "var(--radius-lg)", background: "var(--color-primary-highlight)", border: "1px solid transparent" }}>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--color-primary)", letterSpacing: ".06em", marginBottom: 6 }}>
-                  明天 · Day {Number(stats?.totalDays ?? 0) + 2}
+                  明天 · Day {tomorrow.dayIndex}
                 </div>
                 <div style={{ fontSize: "var(--text-sm)" }}>
                   场景：<b>{tomorrow.scene}</b>（{tomorrow.words} 个新词）
@@ -661,7 +661,7 @@ export default function LessonApp({ user, data }: Props) {
         </section>
 
         <div className="proto-note">
-          <b>数据策略</b>：今天的对话/短文/单词内容只保留当天，新的一天生成时自动清掉更早的当日内容；
+          <b>学习进度</b>：Day 表示课程序号。未提交生成下一课时，当前课程会一直保留；成功生成后，下一课从明天起可学，中断学习不会跳号。
           单词的复习状态（盒子等级、记住次数、下次复习日）和每天的学习反馈长期保留，作为 AI 生成次日课程的依据。
         </div>
       </main>
