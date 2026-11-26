@@ -253,6 +253,8 @@ export default function LessonApp({ user, data }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [tomorrow, setTomorrow] = useState<{ scene: string; title: string; words: number } | null>(null);
   const [generationMessage, setGenerationMessage] = useState("");
+  const [todayMessage, setTodayMessage] = useState("");
+  const [todayAttempt, setTodayAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [tab, setTab] = useState<"word" | "sentence">("word");
@@ -272,6 +274,35 @@ export default function LessonApp({ user, data }: Props) {
     setToast(message);
     setTimeout(() => setToast(""), 2400);
   }, []);
+
+  useEffect(() => {
+    if (!data?.lessonPending || !activeUser) return;
+    const controller = new AbortController();
+    const request = async (url: string, method = "GET") => {
+      const response = await fetch(url, { method, cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]) });
+      const result = await response.json();
+      if (!response.ok) throw new Error("今日课程准备失败，请点击重试。");
+      return result;
+    };
+    void (async () => {
+      try {
+        setTodayMessage("正在为你准备今日课程…");
+        let result = await request("/api/next-preview?day=today", "POST");
+        const task = result.task;
+        const deadline = Date.now() + 125000;
+        while (result.status === "running" && Date.now() < deadline && !controller.signal.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          result = await request(`/api/next-preview?task=${encodeURIComponent(task)}`);
+        }
+        if (controller.signal.aborted) return;
+        if (result.status === "done") router.refresh();
+        else setTodayMessage(result.error || "今日课程尚未完成，请点击重试。");
+      } catch {
+        if (!controller.signal.aborted) setTodayMessage("今日课程准备失败，请点击重试。");
+      }
+    })();
+    return () => controller.abort();
+  }, [data?.lessonPending, activeUser, todayAttempt, router]);
 
   const pickUser = async (key: string) => {
     setBusy(true);
@@ -405,7 +436,12 @@ export default function LessonApp({ user, data }: Props) {
       </header>
 
       <main className="wrap">
-        {data?.lessonWarning ? <p role="status">{data.lessonWarning}</p> : null}
+        {data?.lessonWarning ? (
+          <div role="status">
+            <p>{data.lessonWarning} {todayMessage}</p>
+            <button className="btn" onClick={() => setTodayAttempt((value) => value + 1)}>重新查询或生成今日课程</button>
+          </div>
+        ) : null}
         <div className="hero">
           <div className="scene mono">Day {stats ? stats.totalDays + 1 : 1} · 场景：{lesson?.scene}</div>
           <h1>{lesson?.title}</h1>
@@ -627,7 +663,7 @@ export default function LessonApp({ user, data }: Props) {
               placeholder="今天最难的地方是什么？（例：不知道怎么说“打包带走”）"
               onChange={(event) => setNote(event.target.value)}
             />
-            <button className="btn primary submit" onClick={submitFeedback} disabled={busy}>
+            <button className="btn primary submit" onClick={submitFeedback} disabled={busy || data?.lessonPending}>
               {busy ? "生成中，请稍候…" : submitted ? "反馈已保存，重试或查看明天的课" : "提交反馈，生成明天的课"}
             </button>
             {generationMessage ? <p role="status" aria-live="polite">{generationMessage}</p> : null}

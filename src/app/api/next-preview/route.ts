@@ -4,7 +4,7 @@ import { SESSION_COOKIE, isUserKey } from "@/lib/users";
 import { acquireTask, buildTomorrowLesson, completeTask, ensureUser, failTask, getTask, lessonSummary } from "@/lib/data";
 import { getPrisma, isDatabaseConfigured } from "@/lib/db";
 import { addDays, startOfUtcDay } from "@/lib/srs";
-import type { LessonPayload } from "@/lib/lesson";
+import { isCompleteLesson, type LessonPayload } from "@/lib/lesson";
 
 export const maxDuration = 120;
 
@@ -14,16 +14,19 @@ async function context(request: Request) {
   if (!isDatabaseConfigured()) return { response: Response.json({ ok: false, error: "数据库未配置" }, { status: 503 }) };
   const user = await ensureUser(key);
   if (!user) throw new Error("用户未创建");
-  const taskKey = (request.method === "GET" ? new URL(request.url).searchParams.get("task") : null) || `next:${addDays(startOfUtcDay(), 1).toISOString().slice(0, 10)}`;
-  if (!/^next:\d{4}-\d{2}-\d{2}$/.test(taskKey)) return { response: Response.json({ ok: false, error: "invalid task" }, { status: 400 }) };
-  const date = new Date(`${taskKey.slice(5)}T00:00:00.000Z`);
+  const url = new URL(request.url);
+  const today = url.searchParams.get("day") === "today";
+  const taskKey = (request.method === "GET" ? url.searchParams.get("task") : null) || `${today ? "today" : "next"}:${addDays(startOfUtcDay(), today ? 0 : 1).toISOString().slice(0, 10)}`;
+  if (!/^(today|next):\d{4}-\d{2}-\d{2}$/.test(taskKey)) return { response: Response.json({ ok: false, error: "invalid task" }, { status: 400 }) };
+  const date = new Date(`${taskKey.split(":")[1]}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime())) return { response: Response.json({ ok: false, error: "invalid date" }, { status: 400 }) };
   const lesson = await getPrisma().dailyLesson.findUnique({ where: { userId_date: { userId: user.id, date } } });
-  return { key, userId: user.id, taskKey, date, lesson };
+  return { key, userId: user.id, taskKey, date, lesson: lesson && isCompleteLesson(lesson.payload) ? lesson : null };
 }
 
 function ready(payload: unknown) {
-  return Response.json({ ok: true, status: "done", tomorrow: lessonSummary(payload as LessonPayload) });
+  const lesson = lessonSummary(payload as LessonPayload);
+  return Response.json({ ok: true, status: "done", lesson, tomorrow: lesson });
 }
 
 export async function POST(request: Request) {

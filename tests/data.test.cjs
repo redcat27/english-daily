@@ -32,6 +32,23 @@ test('does not persist fallback lessons when every AI provider fails', async () 
   assert.equal(persisted, false);
 });
 
+test('does not reuse incomplete lessons saved by older deployments', async () => {
+  const incomplete = structuredClone(lessonModule.FALLBACK_LESSON);
+  incomplete.article.paras = incomplete.article.paras.slice(0, 2);
+  database({ findUnique: async () => ({ payload: incomplete }) });
+  mock.method(lessonModule, 'generateLesson', async () => { throw new Error('regenerate incomplete lesson'); });
+  await assert.rejects(data.buildTomorrowLesson('teefs'), /regenerate incomplete lesson/);
+});
+
+test('first page load returns immediately without waiting for an AI provider', async () => {
+  database();
+  let called = false;
+  mock.method(lessonModule, 'generateLesson', async () => { called = true; throw new Error('should run in background'); });
+  const result = await data.getTodayData('teefs');
+  assert.equal(called, false);
+  assert.equal(result.lessonPending, true);
+});
+
 test('only one concurrent request can reclaim a failed generation task', async () => {
   const prisma = database();
   const old = { id: 'task-1', status: 'failed', startedAt: new Date(0), summary: '', error: '' };

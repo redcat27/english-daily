@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { getPrisma, isDatabaseConfigured } from "./db";
 import { LEARNERS, type UserKey } from "./users";
 import { grade, startOfUtcDay, addDays, type GradeResult } from "./srs";
-import { FALLBACK_LESSON, generateLesson, type LessonPayload } from "./lesson";
+import { FALLBACK_LESSON, generateLesson, isCompleteLesson, type LessonPayload } from "./lesson";
 
 export type ReviewWord = {
   word: string;
@@ -23,6 +23,7 @@ export type ReviewWord = {
 export type TodayData = {
   lesson: LessonPayload;
   lessonWarning?: string;
+  lessonPending?: boolean;
   review: ReviewWord[];
   stats: {
     streak: number;
@@ -126,6 +127,7 @@ async function createLessonFor(
           scene: payload.scene,
           title: payload.title,
           dayIndex,
+          level: payload.level,
         },
         create: {
           userId,
@@ -240,10 +242,7 @@ export async function acquireTask(
     if (running && !stale) {
       return { acquired: false, task: { status: "running", summary: existing.summary, error: existing.error } };
     }
-    if (existing.status === "done" && !stale) {
-      return { acquired: false, task: { status: "done", summary: existing.summary, error: existing.error } };
-    }
-    // 失败或超时僵死 -> 重新抢占
+    // 调用方已经确认没有完整课程；失败、残缺结果或僵死任务可以重新抢占。
     const claimed = await prisma.generationTask.updateMany({
       where: { id: existing.id, status: existing.status, startedAt: existing.startedAt },
       data: { status: "running", startedAt: now, finishedAt: null, error: "", summary: "" },
@@ -312,7 +311,7 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
   const today = dayKey();
   let lesson = FALLBACK_LESSON;
   let lessonWarning: string | undefined;
-  let dayIndex = 1;
+  let lessonPending = false;
 
   if (isDatabaseConfigured()) {
     const prisma = getPrisma();
@@ -320,27 +319,21 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
     const existing = await prisma.dailyLesson.findUnique({
       where: { userId_date: { userId, date: today } },
     });
-    if (existing) {
+    if (existing && isCompleteLesson(existing.payload)) {
       lesson = existing.payload as unknown as LessonPayload;
-      dayIndex = existing.dayIndex;
       // 只保留当天内容：清掉更早的课程内容，节省免费额度
       await prisma.dailyLesson.deleteMany({
         where: { userId, date: { lt: today } },
       });
     } else {
-      const latest = await prisma.dailyLesson.findFirst({ where: { userId }, orderBy: { date: "desc" } });
-      dayIndex = (latest?.dayIndex ?? 0) + 1;
-      try {
-        lesson = await createLessonFor(key, today, dayIndex);
-      } catch {
-        lessonWarning = "今日课程暂未生成，以下为体验课程；请稍后刷新重试。";
-      }
+      lessonPending = true;
+      lessonWarning = "今日课程正在准备，以下暂为体验课程；完成后将自动更新。";
     }
   }
 
   const review = await getDueWords(key, 20);
   const stats = await getStats(key);
-  return { lesson, lessonWarning, review, stats };
+  return { lesson, lessonWarning, lessonPending, review, stats };
 }
 
 export async function getStats(key: UserKey) {
@@ -452,7 +445,7 @@ export async function buildTomorrowLesson(key: UserKey, tomorrow = addDays(dayKe
   const userId = await userIdOf(key);
   const prisma = getPrisma();
   const existing = await prisma.dailyLesson.findUnique({ where: { userId_date: { userId, date: tomorrow } } });
-  if (existing) return existing.payload as unknown as LessonPayload;
-  const latest = await prisma.dailyLesson.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+  if (existing && isCompleteLesson(existing.payload)) return existing.payload;
+  const latest = await prisma.dailyLesson.findFirst({ where: { userId, date: { lt: tomorrow } }, orderBy: { date: "desc" } });
   return createLessonFor(key, tomorrow, (latest?.dayIndex ?? 0) + 1);
 }

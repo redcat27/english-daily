@@ -224,6 +224,21 @@ export async function generateLesson(input: GenerationInput): Promise<LessonPayl
   return generateJson(SYSTEM_PROMPT, `${buildUserPrompt(input)}\n\n${LESSON_SPEC}`, (raw) => validateGeneratedLesson(raw, input));
 }
 
+export function isCompleteLesson(raw: unknown): raw is LessonPayload {
+  const source = asLoose(raw);
+  const size = Array.isArray(source.words) ? source.words.length : 0;
+  try {
+    validateGeneratedLesson(raw, {
+      learner: { name: "", level: asString(source.level, "A2") },
+      feedback: [], dueWords: [], recentScenes: [],
+      difficulty: size === 4 ? "down" : size === 10 ? "up" : "base",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const FALLBACK_LESSON: LessonPayload = {
   scene: "在餐厅点餐",
   title: "今天点一份饭，并提一个要求",

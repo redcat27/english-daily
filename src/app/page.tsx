@@ -11,6 +11,6 @@ export default async function Home() {
   const user = isUserKey(cookie) ? cookie : null;
 
   const data = user ? await getTodayData(user) : null;
-  const key = `${user ?? "anon"}-${data ? "ready" : "none"}`;
+  const key = `${user ?? "anon"}-${data?.lessonPending ? "preparing" : data ? "ready" : "none"}`;
   return <LessonApp key={key} user={user ? LEARNERS[user] : null} data={data} />;
 }

@@ -38,7 +38,7 @@ jobs:
               status = response.code
               payload = response.read()
               print(f'{request.get_method()} {path}: {status}, {time.monotonic()-started:.2f}s, {len(payload)} bytes', flush=True)
-              assert status == expected, f'Expected {expected}, got {status}: {payload[:200]}'
+              assert status in (expected if isinstance(expected, list) else [expected]), f'Expected {expected}, got {status}: {payload[:200]}'
               return payload
 
           call('/', 200)
@@ -54,8 +54,15 @@ jobs:
               cached = json.loads(call('/api/next-preview', 200, {}))
               assert cached.get('tomorrow', {}).get('words', 0) > 0
           call('/api/session', 200, {'user': 'groot'})
+          pending = json.loads(call('/api/next-preview?day=today', [200, 202], {}))
+          task = pending.get('task')
+          deadline = time.monotonic() + 125
+          while pending['status'] == 'running' and time.monotonic() < deadline:
+              time.sleep(2)
+              pending = json.loads(call('/api/next-preview?task=' + task, 200))
+          assert pending['status'] == 'done', pending
           page = call('/', 200).decode()
-          assert '今日课程暂未生成' not in page, 'All model candidates failed in production'
+          assert '今日课程正在准备' not in page, 'All model candidates failed in production'
           assert page.count('class="word-en"') >= 4
           print('PASS: production model generation and persisted learner lesson.', flush=True)
           print('PASS: production pages, session, validation, database reads and cached lesson.', flush=True)

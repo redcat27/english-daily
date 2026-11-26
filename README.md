@@ -29,6 +29,7 @@
 
 - 模型顺序：SenseNova `deepseek-flash` → `sensenova-6.8-flash-lite` → MiniMax `MiniMax-M2.5`。遇到限流、超时、空结果或校验失败自动切换，每个模型最多一次，整条链路共用 85 秒预算。
 - 后台执行使用 Next.js `after()`，数据库任务锁避免重复生成，已存在的次日课程直接复用。任务失败可以重试；不会把体验课程当成 AI 结果入库。
+- 首次打开当天课程也不在首屏等待 AI：先显示明确标识的体验课程，浏览器通过 `/api/next-preview?day=today` 启动后台任务，完成后自动刷新。旧版本存下的残缺课程会重新生成。
 - 一次生成整课并校验章节、条目数量及数据库字段长度，避免不同场景内容拼接。日志只记录模型、耗时和状态。
 
 - 输入：学习者历史反馈（跟读/阅读分数 + 一句话难点）、到期的复习词、最近用过的场景、当前难度档
@@ -68,6 +69,7 @@ pnpm dev
 ## 部署
 
 Vercel 项目挂在 team `teefsjiang-5506`，连接 GitHub 仓库 `redcat27/english-daily` 后自动部署。
+函数区域配置为 `sin1`（新加坡），靠近 Neon 和模型供应商。生产部署后可运行 GitHub Actions 的 `Production smoke` 验证公开页面与后台生成。
 环境变量见 `.env.example`。课程生成使用 `SENSENOVA_API_KEY`、`SENSENOVA_CHAT_MODEL`、`SENSENOVA_FALLBACK_MODEL`、`AI_PRIMARY_PROVIDER`；MiniMax 备用和语音使用 `MINIMAX_API_KEY`。密钥仅在服务端读取。
 域名 `english.lulunote.top` 在 Cloudflare 加 CNAME 到 `cname.vercel-dns.com`。
 
