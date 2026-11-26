@@ -65,8 +65,10 @@ node scripts/deploy-vercel.mjs
 ## 5. 绑定域名
 
 1. Vercel 项目 → Settings → Domains → 添加 `english.lulunote.top`
-2. Cloudflare → `lulunote.top` → DNS → 添加 CNAME（名称 `english`，目标 `cname.vercel-dns.com`，橙云）
-3. 等 1-5 分钟，证书自动签发
+2. Cloudflare → `lulunote.top` → DNS → CNAME：名称 `english`，目标 `86018548a8e751f3.vercel-dns-017.com`，DNS only（灰云）、TTL 自动；该方式与已可用的 `teefs` 子域一致。
+3. 确认 Vercel 的域名配置有效，并等待证书签发；公共递归 DNS 可能保留先前不存在记录的负缓存。
+
+2026-11-26 已通过 Cloudflare API 创建并回读确认记录，Vercel `misconfigured=false`；已签发 `english.lulunote.top` 的 Let's Encrypt 证书并开启自动续期。本机 HTTPS 直接请求返回 200（约 0.9 秒），TLS 主机名及信任链校验通过。未修改现有 `teefs` 或主域的记录。
 
 ## 6. 线上验证
 

@@ -2,8 +2,8 @@
 
 手机端 H5 学习站：每天一课（单词 + 情景对话 + 短文），按记忆曲线反复复习已学内容。
 
-- 当前线上地址：https://english-daily-cyan.vercel.app
-- 待绑定域名：https://english.lulunote.top
+- 当前线上地址：https://english.lulunote.top
+- 备用部署地址：https://english-daily-cyan.vercel.app
 - 技术栈：Next.js 16（App Router）+ Tailwind v4 + Prisma 6 + Neon Postgres + Vercel
 - 视觉：移植 teefs-portfolio 的 "Developer Console" 设计令牌（暗色优先 + 翡翠绿），移动优先单列
 
@@ -71,7 +71,7 @@ pnpm dev
 Vercel 项目挂在 team `teefsjiang-5506`，连接 GitHub 仓库 `redcat27/english-daily` 后自动部署。
 函数区域配置为 `sin1`（新加坡），靠近 Neon 和模型供应商。生产部署后可运行 GitHub Actions 的 `Production smoke` 验证公开页面与后台生成。
 环境变量见 `.env.example`。课程生成使用 `SENSENOVA_API_KEY`、`SENSENOVA_CHAT_MODEL`、`SENSENOVA_FALLBACK_MODEL`、`AI_PRIMARY_PROVIDER`；MiniMax 备用和语音使用 `MINIMAX_API_KEY`。密钥仅在服务端读取。
-域名 `english.lulunote.top` 在 Cloudflare 加 CNAME 到 `cname.vercel-dns.com`。
+域名 `english.lulunote.top` 已在 Cloudflare 配置 CNAME 到 `86018548a8e751f3.vercel-dns-017.com`，使用 DNS only（灰云），与 `teefs.lulunote.top` 的配置方式一致。HTTPS 证书由 Vercel 自动续期。
 
 ## 质量门禁
 

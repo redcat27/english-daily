@@ -23,7 +23,7 @@ jobs:
           import urllib.request
           import urllib.error
 
-          base = 'https://english-daily-cyan.vercel.app'
+          base = 'https://english.lulunote.top'
           client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
           def call(path, expected, body=None):
