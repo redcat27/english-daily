@@ -1,5 +1,5 @@
 // 课程内容模型 + AI 生成 + 兜底内容。
-import { chatCompletion, parseJsonLoose } from "./minimax";
+import { generateJson } from "./ai";
 
 export type WordItem = {
   word: string;
@@ -50,7 +50,7 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 function buildUserPrompt(input: GenerationInput): string {
-  const feedbackTail = input.feedback.slice(-5);
+  const feedbackTail = input.feedback.slice(0, 5);
   const feedbackText = feedbackTail.length
     ? feedbackTail
         .map(
@@ -86,11 +86,11 @@ function buildUserPrompt(input: GenerationInput): string {
   ].join("\n");
 }
 
-const WORDS_SPEC = `只输出下面这个 JSON（字段一个都不能少），不要任何解释：
-{"scene":"场景名，中文","title":"今天的目标，中文一句话","words":[{"word":"","phonetic":"/.../","pos":"","meaning":"","example":"","exampleCn":"","tip":""}],"dialogue":{"scene":"","lines":[{"speaker":"A","en":"","cn":""}],"upgrades":["原句 → 更地道的说法（中文说明）"],"followUp":"一句追问练习题"}}`;
-
-const ARTICLE_SPEC = `只输出下面这个 JSON（字段一个都不能少），不要任何解释：
-{"article":{"title":"","paras":[{"en":"","cn":""}],"questions":[{"q":"","a":""}],"retell":""},"reviewSentences":[{"en":"","cn":"","source":""}]}`;
+const LESSON_SPEC = `整课使用同一个生活场景。只输出一个完整 JSON，结构如下，所有字段必填：
+{"scene":"中文场景","title":"中文学习目标","level":"A2","minutes":45,"words":[{"word":"","phonetic":"/.../","pos":"","meaning":"","example":"","exampleCn":"","tip":""}],"dialogue":{"scene":"","lines":[{"speaker":"A","en":"","cn":""}],"upgrades":["原句 → 更自然的说法（中文说明）"],"followUp":"追问练习"},"article":{"title":"","paras":[{"en":"","cn":""}],"questions":[{"q":"","a":""}],"retell":"复述任务"},"reviewSentences":[{"en":"","cn":"","source":""}]}
+article.questions 恰好 3 道，reviewSentences 恰好 3 条，整句选自对话或短文；每条整句不超过 80 个字符。
+scene 和 source 不超过 60 字符，title 不超过 120 字符，word 和 phonetic 不超过 80 字符，pos 不超过 20 字符，meaning 不超过 160 字符，例句及其译文不超过 300 字符。
+只写紧凑 JSON，不要省略课程章节，不要输出思考或 Markdown。`;
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -176,44 +176,52 @@ export function normalizeLesson(raw: unknown, fallback: LessonPayload): LessonPa
   };
 }
 
-async function generatePart(prompt: string, spec: string, label: string): Promise<Record<string, unknown> | null> {
-  let raw = await chatCompletion(SYSTEM_PROMPT, prompt + "\n\n" + spec);
-  let parsed = parseJsonLoose(raw) as Record<string, unknown> | null;
-  if (!parsed) {
-    console.warn(`[lesson] ${label} JSON 解析失败，重试一次`, raw.slice(0, 160));
-    raw = await chatCompletion(
-      SYSTEM_PROMPT + "\n重要：只输出一个 JSON 对象，第一个字符必须是 {，最后一个字符必须是 }，不要任何解释、前后缀或 Markdown 围栏。",
-      prompt + "\n\n" + spec
-    );
-    parsed = parseJsonLoose(raw) as Record<string, unknown> | null;
+function requireText(value: unknown, max = 1000): asserts value is string {
+  if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error("课程字段缺失或过长");
+}
+
+function requireItems(value: unknown, min: number, max: number): Loose[] {
+  if (!Array.isArray(value) || value.length < min || value.length > max) throw new Error("课程数量不完整");
+  return value.map(asLoose);
+}
+
+function validateGeneratedLesson(raw: unknown, input: GenerationInput): LessonPayload {
+  const source = asLoose(raw);
+  requireText(source.scene, 60);
+  requireText(source.title, 120);
+  const expected = input.difficulty === "up" ? [10, 10, 7] : input.difficulty === "down" ? [4, 6, 4] : [8, 8, 6];
+  for (const word of requireItems(source.words, expected[0], expected[0])) {
+    for (const [key, max] of Object.entries({ word: 80, phonetic: 80, pos: 20, meaning: 160, example: 300, exampleCn: 300, tip: 1000 })) requireText(word[key], max);
   }
-  if (!parsed) {
-    console.error(`[lesson] ${label} 重试后仍不是合法 JSON`, raw.slice(0, 160));
-    return null;
+  const dialogue = asLoose(source.dialogue);
+  requireText(dialogue.scene, 120);
+  requireText(dialogue.followUp);
+  for (const line of requireItems(dialogue.lines, expected[1], expected[1])) {
+    for (const key of ["speaker", "en", "cn"]) requireText(line[key]);
   }
-  return parsed;
+  if (!Array.isArray(dialogue.upgrades) || !dialogue.upgrades.length) throw new Error("缺少口语升级练习");
+  dialogue.upgrades.forEach((value) => requireText(value));
+  const article = asLoose(source.article);
+  requireText(article.title);
+  requireText(article.retell);
+  for (const paragraph of requireItems(article.paras, expected[2], expected[2])) {
+    requireText(paragraph.en);
+    requireText(paragraph.cn);
+  }
+  for (const question of requireItems(article.questions, 3, 3)) {
+    requireText(question.q);
+    requireText(question.a);
+  }
+  for (const sentence of requireItems(source.reviewSentences, 3, 3)) {
+    requireText(sentence.en, 80);
+    requireText(sentence.cn, 160);
+    requireText(sentence.source, 60);
+  }
+  return normalizeLesson({ ...source, level: input.learner.level }, FALLBACK_LESSON);
 }
 
 export async function generateLesson(input: GenerationInput): Promise<LessonPayload> {
-  const prompt = buildUserPrompt(input);
-
-  // 两次调用并行：单词+对话 / 短文+题目+整句，各自更短，整体更快
-  const [wordsPart, articlePart] = await Promise.all([
-    generatePart(prompt, WORDS_SPEC, "单词与对话").catch((error) => {
-      console.error("[lesson] 单词与对话生成失败:", error);
-      return null;
-    }),
-    generatePart(prompt, ARTICLE_SPEC, "短文与题目").catch((error) => {
-      console.error("[lesson] 短文与题目生成失败:", error);
-      return null;
-    }),
-  ]);
-
-  const merged: Record<string, unknown> = { ...(wordsPart ?? {}), ...(articlePart ?? {}) };
-  if (!Object.keys(merged).length) {
-    throw new Error("MiniMax 两段内容都生成失败");
-  }
-  return normalizeLesson(merged, FALLBACK_LESSON);
+  return generateJson(SYSTEM_PROMPT, `${buildUserPrompt(input)}\n\n${LESSON_SPEC}`, (raw) => validateGeneratedLesson(raw, input));
 }
 
 export const FALLBACK_LESSON: LessonPayload = {

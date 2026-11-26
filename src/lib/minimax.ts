@@ -73,10 +73,16 @@ export async function chatCompletion(
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`MiniMax 文本接口失败 ${response.status}: ${JSON.stringify(data).slice(0, 200)}`);
+  const status = asLoose(asLoose(data).base_resp).status_code;
+  if (!response.ok || (status !== undefined && status !== 0)) {
+    throw new Error(`MiniMax 文本接口失败 HTTP ${response.status}，业务代码 ${status ?? "unknown"}`);
   }
-  return extractText(data);
+  const choices = asLoose(data).choices;
+  const first = asLoose(Array.isArray(choices) ? choices[0] : null);
+  if (first.finish_reason === "length") throw new Error("MiniMax 输出被截断");
+  const content = extractText(data);
+  if (!content.trim()) throw new Error("MiniMax 返回空内容");
+  return content;
 }
 
 /** 从任意文本里抠出第一个完整的 JSON 对象（忽略 ```json 围栏、前后解释文字） */
@@ -209,8 +215,9 @@ export async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; m
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`MiniMax TTS 失败 ${response.status}: ${JSON.stringify(data).slice(0, 200)}`);
+  const status = asLoose(asLoose(data).base_resp).status_code;
+  if (!response.ok || (status !== undefined && status !== 0)) {
+    throw new Error(`MiniMax TTS 失败 HTTP ${response.status}，业务代码 ${status ?? "unknown"}`);
   }
 
   const hex = asText(asLoose(asLoose(data).data).audio);
