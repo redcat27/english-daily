@@ -23,6 +23,17 @@ test('rejects incomplete JSON instead of filling missing sections with sample le
   await assert.rejects(generateLesson(input), /暂时不可用/);
 });
 
+test('accepts a complete article when its sentences are grouped into one paragraph', async () => {
+  const lesson = structuredClone(FALLBACK_LESSON);
+  const en = lesson.article.paras.map((paragraph) => paragraph.en).join(' ');
+  const cn = lesson.article.paras.map((paragraph) => paragraph.cn).join('');
+  lesson.article.paras = [{ en, cn }];
+  mock.method(globalThis, 'fetch', async () => respond(lesson));
+  const result = await generateLesson(input);
+  assert.equal(result.article.paras.map((paragraph) => paragraph.en).join(' '), en);
+  assert.ok(result.article.paras.every((paragraph) => paragraph.cn));
+});
+
 test('rejects text that cannot fit the database columns', async () => {
   const lesson = structuredClone(FALLBACK_LESSON);
   lesson.reviewSentences[0].en = 'a'.repeat(81);

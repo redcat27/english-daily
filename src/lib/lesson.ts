@@ -81,7 +81,7 @@ function buildUserPrompt(input: GenerationInput): string {
     `最近用过的场景（避免重复）：${input.recentScenes.slice(0, 3).join("、") || "无"}`,
     `今天的难度档：${input.difficulty}`,
     "",
-    `数量要求：单词 ${size.words} 个、对话 ${size.lines} 句、短文 ${size.paras} 句。`,
+    `数量要求：words 数组恰好 ${size.words} 项；dialogue.lines 恰好 ${size.lines} 项；article.paras 建议 ${size.paras} 项，每项一对英中段落，英文正文至少 ${size.paras} 个完整句子。`,
     "单词必须是日常高频词，且必须出现在今天的对话或短文里。",
   ].join("\n");
 }
@@ -204,10 +204,15 @@ function validateGeneratedLesson(raw: unknown, input: GenerationInput): LessonPa
   const article = asLoose(source.article);
   requireText(article.title);
   requireText(article.retell);
-  for (const paragraph of requireItems(article.paras, expected[2], expected[2])) {
+  const paragraphs = requireItems(article.paras, 1, 12);
+  const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
+  let sentences = 0;
+  for (const paragraph of paragraphs) {
     requireText(paragraph.en);
     requireText(paragraph.cn);
+    sentences += Array.from(segmenter.segment(paragraph.en)).filter((item) => /[A-Za-z]/.test(item.segment)).length;
   }
+  if (sentences < expected[2]) throw new Error("短文句子数量不足");
   for (const question of requireItems(article.questions, 3, 3)) {
     requireText(question.q);
     requireText(question.a);
