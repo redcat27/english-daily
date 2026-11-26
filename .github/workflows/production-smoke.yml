@@ -1,0 +1,57 @@
+name: Production smoke
+
+on:
+  workflow_dispatch:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify deployed pages and persistence APIs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import http.cookiejar
+          import json
+          import time
+          import urllib.request
+          import urllib.error
+
+          base = 'https://english-daily-cyan.vercel.app'
+          client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+          def call(path, expected, body=None):
+              started = time.monotonic()
+              request = urllib.request.Request(base + path,
+                  data=json.dumps(body).encode() if body is not None else None,
+                  headers={'Content-Type': 'application/json'})
+              try:
+                  response = client.open(request, timeout=30)
+              except urllib.error.HTTPError as error:
+                  response = error
+              status = response.code
+              payload = response.read()
+              print(f'{request.get_method()} {path}: {status}, {time.monotonic()-started:.2f}s, {len(payload)} bytes', flush=True)
+              assert status == expected, f'Expected {expected}, got {status}: {payload[:200]}'
+              return payload
+
+          call('/', 200)
+          call('/api/next-preview', 401)
+          call('/api/session', 200, {'user': 'teefs'})
+          page = call('/', 200).decode()
+          assert '每日英语' in page and 'word-en' in page
+          call('/api/feedback', 400, {'shadowing': 'invalid', 'reading': 60})
+          call('/api/review', 400, {'word': 'invalid', 'result': 'invalid'})
+          state = json.loads(call('/api/next-preview', 200))
+          assert state.get('status') in ['idle', 'running', 'done', 'failed']
+          if state['status'] == 'done':
+              cached = json.loads(call('/api/next-preview', 200, {}))
+              assert cached.get('tomorrow', {}).get('words', 0) > 0
+          print('PASS: production pages, session, validation, database reads and cached lesson.', flush=True)
+          PY
