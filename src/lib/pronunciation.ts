@@ -44,6 +44,21 @@ export function primePronunciations(texts: string[], onProgress?: (loaded: numbe
   return prefetchAudio(texts, { concurrency: 4, onDone: onProgress });
 }
 
+// iOS 对游离的 Audio 元素很挑：必须挂在文档里，而且要复用同一个元素，
+// 否则 play() 会被静默拒绝（听不到声音）。
+let modelAudio: HTMLAudioElement | null = null;
+
+function getModelAudio(): HTMLAudioElement {
+  if (!modelAudio) {
+    modelAudio = new window.Audio();
+    modelAudio.preload = "auto";
+    modelAudio.setAttribute("playsinline", "true");
+    modelAudio.style.display = "none";
+    document.body.appendChild(modelAudio);
+  }
+  return modelAudio;
+}
+
 /** 播放已经取到手的模型音频（必须同步调用，才能保住 iOS 的用户手势） */
 function playModelBlob(
   blob: Blob,
@@ -52,12 +67,15 @@ function playModelBlob(
   registerCleanup: (fn: () => void) => void
 ) {
   const url = URL.createObjectURL(blob);
-  const audio = new window.Audio(url);
+  const audio = getModelAudio();
+  audio.pause();
+  audio.src = url;
   registerCleanup(() => {
     audio.onplaying = null;
     audio.onended = null;
     audio.onerror = null;
     audio.pause();
+    audio.removeAttribute("src");
     URL.revokeObjectURL(url);
   });
   audio.onplaying = () => report("playing");
