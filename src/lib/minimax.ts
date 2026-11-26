@@ -6,7 +6,7 @@ const CHAT_ENDPOINT = process.env.MINIMAX_CHAT_ENDPOINT || `${BASE_URL}/v1/text/
 const TTS_ENDPOINT = process.env.MINIMAX_TTS_ENDPOINT || `${BASE_URL}/v1/t2a_v2`;
 
 export const TTS_VOICE = process.env.MINIMAX_VOICE_ID || "English_expressive_narrator";
-export const TTS_SPEED = Number(process.env.MINIMAX_VOICE_SPEED || 1);
+export const TTS_SPEED = Number(process.env.MINIMAX_VOICE_SPEED || 0.85);
 
 export function isMiniMaxConfigured(): boolean {
   return Boolean(process.env.MINIMAX_API_KEY);
@@ -227,6 +227,7 @@ export async function synthesizeSpeech(text: string, speed?: number): Promise<{ 
   const audio = isHex ? Buffer.from(hex, "hex") : Buffer.from(hex, "base64");
   return { audio, mime: "audio/mpeg" };
 }
+
 
 
 

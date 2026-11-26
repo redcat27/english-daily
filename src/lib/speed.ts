@@ -8,8 +8,8 @@ const KEY = "english_speed";
 export const MIN_SPEED = 0.6;
 export const MAX_SPEED = 1.4;
 
-let current = 1;
-let defaultSpeed = 1;
+let current = 0.85;
+let defaultSpeed = 0.85;
 let loaded = false;
 const listeners = new Set<() => void>();
 
@@ -69,3 +69,4 @@ export function useSpeed(): number {
 export function useDefaultSpeed(): number {
   return defaultSpeed;
 }
+

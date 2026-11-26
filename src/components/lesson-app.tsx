@@ -108,73 +108,75 @@ function ReviewCard({
   item,
   index,
   onGrade,
+  initiallyOpen,
 }: {
   item: LocalReview;
   index: number;
   onGrade: (key: string, result: "know" | "forgot") => void;
+  initiallyOpen: boolean;
 }) {
-  const [revealed, setRevealed] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const sentence = item.pos === "句子";
   const head = item.word;
   const phonetic = sentence ? "" : item.phonetic;
-  const meaning = item.meaning;
   const example = sentence ? "" : item.example;
   const exampleCn = sentence ? "" : item.exampleCn;
   const key = item.word;
 
   return (
-    <div className={"card rcard" + (revealed ? " revealed" : "")}>
-      <div className="rhead">
-        <span className="box-chip">{sentence ? "句子卡 · " : ""}{dueLabel(item)}</span>
-        <span>第 {index + 1} 张</span>
-        <span style={{ marginLeft: "auto" }}>
-          {item.hits ? `已连续记住 ${item.hits} 次` : ""}
-        </span>
-      </div>
-      <div className="w">{head}</div>
-      {phonetic ? <div className="ph">{phonetic}</div> : null}
-      <div className="hide m">{meaning}</div>
-      {sentence ? null : (
-        <div className="hide eg">
-          {example}
-          <div className="cn">{exampleCn}</div>
-        </div>
-      )}
-      <div className="rbtns">
-        <SpeakerButton text={head} />
-      </div>
-      {!item.graded ? (
-        <>
-          {!revealed ? (
-            <div className="rbtns">
-              <button
-                className="rbtn"
-                style={{ background: "var(--color-surface-dynamic)", color: "var(--color-text-muted)" }}
-                onClick={() => setRevealed(true)}
-              >
-                看释义和例句
-              </button>
+    <div className={"card word review-card" + (open ? " open" : "") + (sentence ? " sentence-card" : "")}>
+      <button className="word-toggle" onClick={() => setOpen((value) => !value)}>
+        <div className="word-top">
+          <div className="word-main">
+            <div className="word-en">
+              {head}
+              {phonetic ? <span className="word-ph">{phonetic}</span> : null}
+              {!open ? <span className="review-hint">点开看释义</span> : null}
             </div>
-          ) : null}
-          <div className="rbtns">
-            <button className="rbtn know" onClick={() => onGrade(key, "know")}>
+            {open ? (
+              <div className="word-cn">
+                <i>{sentence ? "句子" : item.pos}</i>
+                {item.meaning}
+              </div>
+            ) : null}
+          </div>
+          <SpeakerButton text={head} label={sentence ? "朗读句子" : "朗读单词"} />
+        </div>
+      </button>
+      {open ? (
+        <div className="word-detail">
+          {sentence ? null : (
+            <div className="eg">
+              <div className="eg-row">
+                <span>{example}</span>
+                <SpeakerButton text={example} label="朗读例句" />
+              </div>
+              <div className="cn">{exampleCn}</div>
+            </div>
+          )}
+          <div className="review-meta">
+            <span className="box-chip">{dueLabel(item)}</span>
+            <span>第 {index + 1} 张</span>
+            {item.hits ? <span>已连续记住 {item.hits} 次</span> : null}
+          </div>
+          <div className="word-actions">
+            <button
+              className={"btn-sm" + (item.graded === "know" ? " on-known" : "")}
+              onClick={() => onGrade(key, "know")}
+              disabled={item.graded === "know"}
+            >
               ✓ 记住了
             </button>
-            <button className="rbtn forgot" onClick={() => onGrade(key, "forgot")}>
+            <button
+              className={"btn-sm" + (item.graded === "forgot" ? " on-unsure" : "")}
+              onClick={() => onGrade(key, "forgot")}
+              disabled={item.graded === "forgot"}
+            >
               ✗ 没记住
             </button>
           </div>
-        </>
-      ) : (
-        <div className="rbtns">
-          <div
-            className={"rbtn " + (item.graded === "know" ? "know" : "forgot")}
-            style={{ cursor: "default" }}
-          >
-            {item.graded === "know" ? "✓ 记住了" : "✗ 没记住"}
-          </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -204,6 +206,7 @@ export default function LessonApp({ user, data }: Props) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [tab, setTab] = useState<"word" | "sentence">("word");
+  const [reviewExpandAll, setReviewExpandAll] = useState(false);
   const [audioSource, setAudioSource] = useState<AudioSource>("unknown");
   const [prefetch, setPrefetch] = useState({ loaded: 0, total: 0 });
   const speed = useSpeed();
@@ -548,17 +551,27 @@ export default function LessonApp({ user, data }: Props) {
           <div className="sec-head">
             <span className="n">01</span>
             <h2>今日复习</h2>
-            <span className="hint">{visibleGradedCount} / {visibleReview.length} 已复习</span>
+            <span className="hint review-tools">
+              {visibleGradedCount} / {visibleReview.length} 已复习
+              <button className="chip" onClick={() => setReviewExpandAll(true)}>全部展开</button>
+              <button className="chip" onClick={() => setReviewExpandAll(false)}>全部收起</button>
+            </span>
           </div>
           <div className="tabs">
             <button className={"rtab" + (tab === "word" ? " active" : "")} onClick={() => setTab("word")}>单词卡</button>
             <button className={"rtab" + (tab === "sentence" ? " active" : "")} onClick={() => setTab("sentence")}>句子卡</button>
           </div>
           {tab === "word" ? (
-            <div>
+            <div key={reviewExpandAll ? "all-open" : "all-closed"}>
               {visibleReview.length ? (
                 visibleReview.map((item, index) => (
-                  <ReviewCard key={item.word} item={item} index={index} onGrade={onGrade} />
+                  <ReviewCard
+                    key={item.word}
+                    item={item}
+                    index={index}
+                    onGrade={onGrade}
+                    initiallyOpen={reviewExpandAll}
+                  />
                 ))
               ) : (
                 <div className="card" style={{ padding: 14, fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
@@ -567,7 +580,7 @@ export default function LessonApp({ user, data }: Props) {
               )}
             </div>
           ) : (
-            <div>
+            <div key={reviewExpandAll ? "all-open" : "all-closed"}>
               {visibleReview.length ? (
                 visibleReview.map((item, index) => (
                   <ReviewCard
@@ -575,6 +588,7 @@ export default function LessonApp({ user, data }: Props) {
                     item={item}
                     index={index}
                     onGrade={onGrade}
+                    initiallyOpen={reviewExpandAll}
                   />
                 ))
               ) : (
@@ -835,6 +849,7 @@ function WordRow({ item, index }: { item: LessonPayload["words"][number]; index:
               {item.meaning}
             </div>
           </div>
+          <SpeakerButton text={item.word} label="朗读单词" />
         </div>
       </button>
       <div className="word-detail">
@@ -859,7 +874,6 @@ function WordRow({ item, index }: { item: LessonPayload["words"][number]; index:
           >
             ~ 还不太熟
           </button>
-          <SpeakerButton text={item.word} />
         </div>
       </div>
       <span hidden>{index}</span>

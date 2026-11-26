@@ -39,6 +39,12 @@ export type GenerationInput = {
   feedback: { date: string; shadowing: number; reading: number; note: string }[];
   dueWords: { word: string; meaning: string; hits: number; misses: number }[];
   recentScenes: string[];
+  /** 历史学过的词（新词必须避开） */
+  learnedWords?: string[];
+  /** 已经通过记忆法检测、掌握牢固的词 */
+  graduatedWords?: string[];
+  /** 累计学过的词量，用于逐步扩大每日新词量 */
+  knownWordCount?: number;
   difficulty: "up" | "base" | "down";
   instruction?: string;
 };
@@ -68,23 +74,33 @@ function buildUserPrompt(input: GenerationInput): string {
         .join("、")
     : "无";
 
+  // 词汇量随历史积累逐步扩大：每多学 40 个词多给 1 个新词，上限 16
+  const known = input.knownWordCount ?? 0;
+  const growth = Math.min(8, Math.floor(known / 40));
   const size =
     input.difficulty === "up"
-      ? { words: 10, lines: 10, paras: 7 }
+      ? { words: Math.min(16, 10 + growth), lines: 10, paras: 7 }
       : input.difficulty === "down"
-        ? { words: 4, lines: 6, paras: 4 }
-        : { words: 8, lines: 8, paras: 6 };
+        ? { words: Math.max(4, 6 - growth), lines: 6, paras: 4 }
+        : { words: Math.min(14, 8 + growth), lines: 8, paras: 6 };
+
+  const learnedText = (input.learnedWords ?? []).slice(0, 120).join("、") || "无";
+  const graduatedText = (input.graduatedWords ?? []).slice(0, 60).join("、") || "无";
 
   return [
-    `学习者：${input.learner.name}，当前级别 ${input.learner.level}`,
+    `学习者：${input.learner.name}，当前级别 ${input.learner.level}，累计已学 ${known} 个词`,
     `最近学习反馈：\n${feedbackText}`,
     `需要复习的旧词（可以挑 0-3 个放进今天的对话里复用）：${dueText}`,
+    `历史已学单词（新词绝对不能与它们重复）：${learnedText}`,
+    `已掌握、很熟的词（可以用更自然的同义表达替换它们）：${graduatedText}`,
     `最近用过的场景（避免重复）：${input.recentScenes.slice(0, 3).join("、") || "无"}`,
     `今天的难度档：${input.difficulty}`,
     input.instruction ? `学习者对下一课的要求（只调整场景、内容和练习，仍须遵守英语课程格式及数量要求）：${JSON.stringify(input.instruction)}` : "",
     "",
     `数量要求：words 数组恰好 ${size.words} 项；dialogue.lines 恰好 ${size.lines} 项；article.paras 建议 ${size.paras} 项，每项一对英中段落，英文正文至少 ${size.paras} 个完整句子。`,
     "单词必须是日常高频词，且必须出现在今天的对话或短文里。",
+    "新词不得与历史已学词表重复；优先选择学习者还没接触过的生活场景；",
+    "随着历史词汇量增加，逐步提高用词难度（可给出更贴切的近义表达或更完整的说法），但仍要口语化。",
   ].join("\n");
 }
 

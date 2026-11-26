@@ -228,3 +228,53 @@
 .speed-range::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 999px; background: var(--color-primary); }
 .speed-value { font-size: var(--text-xs); color: var(--color-text); min-width: 34px; text-align: right; }
 .speed-reset { cursor: pointer; }
+
+/* ===== 统一卡片（复习 = 新词）+ 喇叭固定在文本右侧 ===== */
+.word-top, .para-en, .line { position: relative; }
+.word-main, .line .body { padding-right: 46px; }
+.para-en > .en { padding-right: 46px; }
+
+.word-top > .speak,
+.para-en > .speak,
+.line > .speak {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  z-index: 1;
+}
+.eg-row > .speak {
+  position: absolute;
+  right: 0;
+  top: 2px;
+  transform: none;
+  width: 32px;
+  height: 32px;
+}
+.eg-row { position: relative; padding-right: 40px; }
+
+/* 复习卡：与新词卡同款；收起时只显示英文 */
+.review-card .review-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  margin-left: 8px;
+  font-weight: 400;
+}
+.review-card .word-en { display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; }
+.review-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  margin-top: 10px;
+}
+/* 句子卡：更精简小巧 */
+.sentence-card { padding: 9px 12px; }
+.sentence-card .word-en { font-size: var(--text-base); }
+.sentence-card .word-detail { padding-top: 10px; margin-top: 10px; }
+.review-tools { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.review-tools .chip { cursor: pointer; }

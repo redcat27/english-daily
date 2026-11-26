@@ -111,8 +111,8 @@ async function createLessonFor(
   dayIndex: number,
   instruction?: string
 ): Promise<LessonPayload> {
-  const [feedback, dueWords, recentScenes] = await Promise.all([
-    getRecentFeedback(key), getDueWords(key, 12), getRecentScenes(key),
+  const [feedback, dueWords, recentScenes, learned] = await Promise.all([
+    getRecentFeedback(key), getDueWords(key, 12), getRecentScenes(key), getLearnedWords(key),
   ]);
   const learner = LEARNERS[key];
 
@@ -121,6 +121,9 @@ async function createLessonFor(
     feedback,
     dueWords: dueWords.map((w) => ({ word: w.word, meaning: w.meaning, hits: w.hits, misses: w.misses })),
     recentScenes,
+    learnedWords: learned.learned,
+    graduatedWords: learned.graduated,
+    knownWordCount: learned.total,
     difficulty: pickDifficulty(feedback),
     instruction,
   });
@@ -199,7 +202,11 @@ async function seedWords(prisma: Prisma.TransactionClient, userId: string, paylo
   }
 }
 
-export async function getDueWords(key: UserKey, limit = 20): Promise<ReviewWord[]> {
+export async function getDueWords(
+  key: UserKey,
+  limit = 20,
+  options: { pullForward?: boolean } = {}
+): Promise<ReviewWord[]> {
   if (!isDatabaseConfigured()) return [];
   const prisma = getPrisma();
   const userId = await userIdOf(key);
@@ -209,6 +216,15 @@ export async function getDueWords(key: UserKey, limit = 20): Promise<ReviewWord[
     orderBy: [{ dueDate: "asc" }, { box: "asc" }],
     take: limit,
   });
+  // 到期词不够时，把次日到期的词提前拉来复习（复习量通常多于新词量）
+  if (options.pullForward && rows.length < limit) {
+    const extra = await prisma.wordProgress.findMany({
+      where: { userId, graduated: false, dueDate: { gt: today } },
+      orderBy: [{ dueDate: "asc" }, { box: "asc" }],
+      take: limit - rows.length,
+    });
+    rows.push(...extra);
+  }
   return rows.map((row) => ({
     word: row.word,
     phonetic: row.phonetic,
@@ -366,6 +382,30 @@ export async function pruneOldLessons(userId: string) {
   return result.count;
 }
 
+
+/** 该用户历史学过的词：用于让 AI 避开重复、逐步扩大词汇量 */
+export async function getLearnedWords(
+  key: UserKey,
+  limit = 120
+): Promise<{ learned: string[]; graduated: string[]; total: number }> {
+  const empty = { learned: [] as string[], graduated: [] as string[], total: 0 };
+  if (!isDatabaseConfigured()) return empty;
+  const prisma = getPrisma();
+  const userId = await userIdOf(key);
+  const rows = await prisma.wordProgress.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    select: { word: true, graduated: true, hits: true },
+  });
+  const graduated = rows.filter((row) => row.graduated).map((row) => row.word);
+  const learning = rows.filter((row) => !row.graduated).map((row) => row.word);
+  return {
+    learned: learning.slice(0, limit),
+    graduated: graduated.slice(0, 60),
+    total: rows.length,
+  };
+}
+
 export async function getTodayData(key: UserKey): Promise<TodayData> {
   let lesson = FALLBACK_LESSON;
   let dayIndex = 1;
@@ -395,7 +435,9 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
     }
   }
 
-  const review = await getDueWords(key, 20);
+  // 复习量通常多于新词量：按 max(12, 新词数) 拉取，不足时提前取次日到期的词
+  const reviewTarget = Math.max(12, (lesson.words?.length ?? 0));
+  const review = await getDueWords(key, reviewTarget, { pullForward: true });
   const stats = await getStats(key);
   const audioDefaultSpeed = Math.max(0.6, Math.min(1.4, Number(process.env.MINIMAX_VOICE_SPEED) || 1));
   return { lesson, dayIndex, audioDefaultSpeed, lessonId, nextLesson, lessonWarning, lessonPending, review, stats };
