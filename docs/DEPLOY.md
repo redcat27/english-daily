@@ -48,6 +48,8 @@ pnpm build; pnpm start
 当前项目已连接 `redcat27/english-daily` 的 `main`，推送该分支会自动生产部署。
 修改供应商配置时先更新 Vercel 服务端环境变量，再部署；仅修改环境变量不会更新已存在的部署。
 
+`pnpm build` 先执行 `prisma generate` 再构建 Next.js，避免 Vercel 恢复依赖缓存后沿用旧 schema 的客户端类型。
+
 课程生成配置：`AI_PRIMARY_PROVIDER=minimax`、`SENSENOVA_API_KEY`、
 `SENSENOVA_BASE_URL=https://token.sensenova.cn/v1`、`SENSENOVA_CHAT_MODEL=deepseek-flash`、
 `SENSENOVA_FALLBACK_MODEL=sensenova-6.8-flash-lite`、`SENSENOVA_TIMEOUT_MS=40000`。
