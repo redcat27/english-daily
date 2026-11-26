@@ -6,7 +6,7 @@ import { getPrisma, isDatabaseConfigured } from "@/lib/db";
 import { addDays } from "@/lib/srs";
 import { isCompleteLesson } from "@/lib/lesson";
 
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 async function context(request: Request) {
   const key = (await cookies()).get(SESSION_COOKIE)?.value;
@@ -124,3 +124,4 @@ export async function PATCH(request: Request) {
     return Response.json({ ok: false, error: "暂时无法重新生成，请稍后重试。" }, { status: 503 });
   }
 }
+

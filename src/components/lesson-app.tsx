@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import type { Learner } from "@/lib/users";
 import type { ReviewWord, TodayData } from "@/lib/data";
 import type { LessonPayload } from "@/lib/lesson";
-import { startPronunciation, type PlaybackState } from "@/lib/pronunciation";
+import { startPronunciation, primePronunciations, onAudioSource, type AudioSource, type PlaybackState } from "@/lib/pronunciation";
+import { cacheGet as ttsCacheGet, cachePut as ttsCachePut } from "@/lib/audio-cache";
 
 type Props = {
   user: Learner | null;
@@ -13,49 +14,6 @@ type Props = {
 };
 
 const INTERVALS = [1, 2, 4, 7, 15, 30];
-
-/* ---------------- TTS：MiniMax 自然人声 + 浏览器缓存（IndexedDB） ---------------- */
-
-const TTS_DB = "english-tts";
-const TTS_STORE = "audio";
-
-function openTtsDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(TTS_DB, 1);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(TTS_STORE);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function ttsCacheGet(key: string): Promise<Blob | null> {
-  try {
-    const db = await openTtsDb();
-    return await new Promise((resolve) => {
-      const req = db.transaction(TTS_STORE, "readonly").objectStore(TTS_STORE).get(key);
-      req.onsuccess = () => resolve((req.result as Blob) ?? null);
-      req.onerror = () => resolve(null);
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function ttsCachePut(key: string, blob: Blob): Promise<void> {
-  try {
-    const db = await openTtsDb();
-    await new Promise<void>((resolve) => {
-      const tx = db.transaction(TTS_STORE, "readwrite");
-      tx.objectStore(TTS_STORE).put(blob, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    });
-  } catch {
-    /* 缓存失败不影响使用 */
-  }
-}
 
 /* ---------------- 小组件 ---------------- */
 
@@ -67,6 +25,9 @@ function SpeakerButton({ text, label }: { text: string; label?: string }) {
   const busy = state === "loading" || state === "playing";
 
   useEffect(() => () => stop.current?.(), []);
+
+
+
 
   // 保持同步调用：iPhone 不能等异步接口失败后才尝试系统语音。
   const onClick = (event: MouseEvent, forceSystem = false) => {
@@ -216,6 +177,7 @@ function ReviewCard({
 }
 
 export default function LessonApp({ user, data }: Props) {
+
   const router = useRouter();
   const activeUser = user;
   const [pickerOpen, setPickerOpen] = useState(!user);
@@ -239,6 +201,25 @@ export default function LessonApp({ user, data }: Props) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [tab, setTab] = useState<"word" | "sentence">("word");
+  const [audioSource, setAudioSource] = useState<AudioSource>("unknown");
+  const [prefetch, setPrefetch] = useState({ loaded: 0, total: 0 });
+  useEffect(() => onAudioSource((source) => setAudioSource(source)), []);
+
+  // 提前把本页要朗读的音频备好：iPhone 点击时才能同步播放模型音色
+  useEffect(() => {
+    if (!lesson) return;
+    const texts = [
+      ...lesson.words.map((word) => word.word),
+      ...lesson.dialogue.lines.map((line) => line.en),
+      ...lesson.article.paras.map((para) => para.en),
+    ];
+    const timer = setTimeout(() => {
+      setPrefetch({ loaded: 0, total: texts.length });
+      void primePronunciations(texts, (loaded, total) => setPrefetch({ loaded, total }));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [lesson]);
+
   const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
@@ -512,6 +493,10 @@ export default function LessonApp({ user, data }: Props) {
             <span className="chip">级别 <b>{activeUser?.level ?? "A2"}</b></span>
             <span className="chip">约 <b>{lesson?.minutes ?? 45}</b> 分钟</span>
             <span className="chip accent">今日复习 {review.length} 条</span>
+        <span className={"chip" + (audioSource === "model" ? " accent" : "")}>
+          {audioSource === "model" ? "🔊 AI 音色" : audioSource === "system" ? "🔊 系统音色" : "🔊 音色准备中"}
+          {prefetch.total ? ` ${prefetch.loaded}/${prefetch.total}` : ""}
+        </span>
           </div>
           <div className="progress">
             <div className="progress-bar"><i style={{ width: progressPct + "%" }} /></div>

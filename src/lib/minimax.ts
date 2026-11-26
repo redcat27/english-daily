@@ -45,7 +45,7 @@ function extractText(data: unknown): string {
   return asText(message.content) || asText(first.text);
 }
 
-const CHAT_TIMEOUT_MS = Number(process.env.MINIMAX_TIMEOUT_MS || 25000);
+const CHAT_TIMEOUT_MS = Number(process.env.MINIMAX_TIMEOUT_MS || 180000);
 
 export async function chatCompletion(
   systemPrompt: string,
@@ -68,7 +68,7 @@ export async function chatCompletion(
       // M2.5 是推理模型，输出偏长；上限给足，避免 JSON 被截断
       max_tokens: 8192,
       // 结构化 JSON 任务不需要推理：关掉思考可把耗时减半（实测 8s -> 4s）
-      thinking: { type: process.env.MINIMAX_THINKING === "enabled" ? "enabled" : "disabled" },
+      thinking: { type: process.env.MINIMAX_THINKING === "disabled" ? "disabled" : "enabled" },
       stream: false,
     }),
   });
@@ -227,5 +227,6 @@ export async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; m
   const audio = isHex ? Buffer.from(hex, "hex") : Buffer.from(hex, "base64");
   return { audio, mime: "audio/mpeg" };
 }
+
 
 
