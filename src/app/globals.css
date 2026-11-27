@@ -284,3 +284,7 @@
 .sentence-card .word-detail { padding-top: 10px; margin-top: 10px; }
 .review-tools { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .review-tools .chip { cursor: pointer; }
+
+/* 阅读题：英文提问 + 下方中文翻译 */
+.qa .q .txt { display: flex; flex-direction: column; gap: 3px; }
+.qa .q .q-cn { font-size: var(--text-xs); color: var(--color-text-faint); font-weight: 400; }

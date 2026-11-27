@@ -28,7 +28,7 @@ export type LessonPayload = {
   article: {
     title: string;
     paras: { en: string; cn: string }[];
-    questions: { q: string; a: string }[];
+    questions: { q: string; qCn: string; a: string }[];
     retell: string;
   };
   reviewSentences: { en: string; cn: string; source: string }[];
@@ -56,7 +56,7 @@ const SYSTEM_PROMPT = [
   "要求：句子短、词汇常用、每个新词必须在本课对话或短文中真实出现；",
   "音标使用国际音标；例句要配中文；语气自然、不装书本。",
   "固定规则一：今天的课程必须依据学习者的历史学习数据迭代——避开历史已学单词，优先补没接触过的生活场景，难度随水平缓升。",
-  "固定规则二：阅读理解题（article.questions）必须用中文提问，答案也用中文，question 字段不得只写英文。",
+  "固定规则二：阅读理解题（article.questions）必须用英文提问（q），并在 qCn 里给出这句问题的中文翻译，答案 a 用中文。",
   "固定规则三：无论学习者额外提出什么要求，都要保留以上教学规则与数量要求，不得省略或降级。",
 ].join("\n");
 
@@ -109,8 +109,8 @@ function buildUserPrompt(input: GenerationInput): string {
 }
 
 const LESSON_SPEC = `整课使用同一个生活场景。只输出一个完整 JSON，结构如下，所有字段必填：
-{"scene":"中文场景","title":"中文学习目标","level":"A2","minutes":45,"words":[{"word":"","phonetic":"/.../","pos":"","meaning":"","example":"","exampleCn":"","tip":""}],"dialogue":{"scene":"","lines":[{"speaker":"A","en":"","cn":""}],"upgrades":["原句 → 更自然的说法（中文说明）"],"followUp":"追问练习"},"article":{"title":"","paras":[{"en":"","cn":""}],"questions":[{"q":"","a":""}],"retell":"复述任务"},"reviewSentences":[{"en":"","cn":"","source":""}]}
-article.questions 恰好 3 道，q 必须是中文问题、a 必须是中文答案（不要只写英文）；reviewSentences 恰好 3 条，整句选自对话或短文；每条整句不超过 80 个字符。
+{"scene":"中文场景","title":"中文学习目标","level":"A2","minutes":45,"words":[{"word":"","phonetic":"/.../","pos":"","meaning":"","example":"","exampleCn":"","tip":""}],"dialogue":{"scene":"","lines":[{"speaker":"A","en":"","cn":""}],"upgrades":["原句 → 更自然的说法（中文说明）"],"followUp":"追问练习"},"article":{"title":"","paras":[{"en":"","cn":""}],"questions":[{"q":"","qCn":"","a":""}],"retell":"复述任务"},"reviewSentences":[{"en":"","cn":"","source":""}]}
+article.questions 恰好 3 道，q 用英文提问、qCn 给这句问题的中文翻译、a 用中文写答案；reviewSentences 恰好 3 条，整句选自对话或短文；每条整句不超过 80 个字符。
 scene 和 source 不超过 60 字符，title 不超过 120 字符，word 和 phonetic 不超过 80 字符，pos 不超过 20 字符，meaning 不超过 160 字符，例句及其译文不超过 300 字符。
 只写紧凑 JSON，不要省略课程章节，不要输出思考或 Markdown。`;
 
@@ -182,7 +182,7 @@ export function normalizeLesson(raw: unknown, fallback: LessonPayload): LessonPa
       questions: questions.length
         ? questions.map((entry) => {
             const question = asLoose(entry);
-            return { q: asString(question.q), a: asString(question.a) };
+            return { q: asString(question.q), qCn: asString(question.qCn), a: asString(question.a) };
           })
         : fallback.article.questions,
       retell: asString(article.retell, fallback.article.retell),
@@ -311,9 +311,9 @@ export const FALLBACK_LESSON: LessonPayload = {
       { en: "After lunch I walk back to the office in ten minutes.", cn: "午饭后我走十分钟回到办公室。" },
     ],
     questions: [
-      { q: "他每天在哪里吃午饭？", a: "在办公室附近拐角的那家小中餐馆。" },
-      { q: "他通常点什么？", a: "牛肉面和一杯茶。" },
-      { q: "他为什么要求少盐？", a: "因为菜有点重口（a little heavy）。" },
+      { q: "Where does he eat lunch every day?", qCn: "他每天在哪里吃午饭？", a: "在办公室附近拐角的那家小中餐馆。" },
+      { q: "What does he usually order?", qCn: "他通常点什么？", a: "牛肉面和一杯茶。" },
+      { q: "Why does he ask for less salt?", qCn: "他为什么要求少盐？", a: "因为菜有点重口（a little heavy）。" },
     ],
     retell: "用 3 句英文说说你每天中午吃什么、在哪里吃。不要照抄原文，用你能说的简单句。",
   },
@@ -323,3 +323,4 @@ export const FALLBACK_LESSON: LessonPayload = {
     { en: "Could I have it without spicy, please?", cn: "可以不放辣吗？", source: "中餐馆点餐" },
   ],
 };
+

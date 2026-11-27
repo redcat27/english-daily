@@ -862,14 +862,17 @@ function QuestionRow({
   question,
 }: {
   index: number;
-  question: { q: string; a: string };
+  question: { q: string; qCn?: string; a: string };
 }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={"qa" + (open ? " open" : "")}>
       <button className="q" onClick={() => setOpen((value) => !value)}>
         <span className="num">Q{index + 1}</span>
-        <span className="txt">{question.q}</span>
+        <span className="txt">
+          {question.q}
+          {question.qCn ? <span className="q-cn">{question.qCn}</span> : null}
+        </span>
         <svg className="ic caret"><use href="#i-caret" /></svg>
       </button>
       <div className="a">💡 {question.a}</div>
