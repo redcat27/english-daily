@@ -11,8 +11,11 @@ const STORE = "audio";
 const memory = new Map<string, Blob>();
 
 /** 语速不同则音频不同，缓存键必须带语速 */
+// 音色/语速变化后旧音频必须失效：把版本号与语速一起写进缓存键
+const AUDIO_CACHE_VERSION = "v2";
+
 export function audioKey(text: string, speed: number): string {
-  return `${speed.toFixed(2)}|${text.trim()}`;
+  return `${AUDIO_CACHE_VERSION}|${speed.toFixed(2)}|${text.trim()}`;
 }
 
 function openDb(): Promise<IDBDatabase> {

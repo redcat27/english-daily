@@ -5,7 +5,8 @@ const BASE_URL = (process.env.MINIMAX_BASE_URL || "https://api.minimax.io").repl
 const CHAT_ENDPOINT = process.env.MINIMAX_CHAT_ENDPOINT || `${BASE_URL}/v1/text/chatcompletion_v2`;
 const TTS_ENDPOINT = process.env.MINIMAX_TTS_ENDPOINT || `${BASE_URL}/v1/t2a_v2`;
 
-export const TTS_VOICE = process.env.MINIMAX_VOICE_ID || "English_expressive_narrator";
+// 地道美式英语音色（已验证该账号可用：American_narrator）
+export const TTS_VOICE = process.env.MINIMAX_VOICE_ID || "American_narrator";
 export const TTS_SPEED = Number(process.env.MINIMAX_VOICE_SPEED || 0.85);
 
 export function isMiniMaxConfigured(): boolean {
