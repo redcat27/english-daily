@@ -170,14 +170,6 @@ async function seedWords(prisma: Prisma.TransactionClient, userId: string, paylo
       example: w.example ?? "",
       exampleCn: w.exampleCn ?? "",
     })),
-    ...payload.reviewSentences.map((s) => ({
-      word: s.en,
-      phonetic: "",
-      pos: "句子",
-      meaning: s.cn,
-      example: s.source ? `场景：${s.source}` : "",
-      exampleCn: "",
-    })),
   ];
   for (const item of entries) {
     if (!item.word) continue;
@@ -435,9 +427,13 @@ export async function getTodayData(key: UserKey): Promise<TodayData> {
     }
   }
 
-  // 复习量通常多于新词量：按 max(12, 新词数) 拉取，不足时提前取次日到期的词
+  // 复习量通常多于新词量：按 max(12, 新词数) 拉取，不足时提前取次日到期的词。
+  // 但「今日复习只来自历史学过的单词」——今天这节课的新词绝不能出现在今天的复习卡里。
   const reviewTarget = Math.max(12, (lesson.words?.length ?? 0));
-  const review = await getDueWords(key, reviewTarget, { pullForward: true });
+  const todayWords = new Set((lesson.words ?? []).map((w) => w.word.trim().toLowerCase()));
+  const review = (await getDueWords(key, reviewTarget + todayWords.size, { pullForward: true }))
+    .filter((item) => !todayWords.has(item.word.trim().toLowerCase()))
+    .slice(0, reviewTarget);
   const stats = await getStats(key);
   const audioDefaultSpeed = Math.max(0.6, Math.min(1.4, Number(process.env.MINIMAX_VOICE_SPEED) || 1));
   return { lesson, dayIndex, audioDefaultSpeed, lessonId, nextLesson, lessonWarning, lessonPending, review, stats };

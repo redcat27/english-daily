@@ -205,7 +205,6 @@ export default function LessonApp({ user, data }: Props) {
   const [todayAttempt, setTodayAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
-  const [tab, setTab] = useState<"word" | "sentence">("word");
   const [reviewExpandAll, setReviewExpandAll] = useState(false);
   const [audioSource, setAudioSource] = useState<AudioSource>("unknown");
   const [prefetch, setPrefetch] = useState({ loaded: 0, total: 0 });
@@ -461,7 +460,7 @@ export default function LessonApp({ user, data }: Props) {
   };
 
   const gradedCount = review.filter((item) => item.graded).length;
-  const visibleReview = review.filter((item) => (item.pos === "句子") === (tab === "sentence"));
+  const visibleReview = review;
   const visibleGradedCount = visibleReview.filter((item) => item.graded).length;
   const progressSteps = [
     gradedCount >= 4,
@@ -557,47 +556,24 @@ export default function LessonApp({ user, data }: Props) {
               <button className="chip" onClick={() => setReviewExpandAll(false)}>全部收起</button>
             </span>
           </div>
-          <div className="tabs">
-            <button className={"rtab" + (tab === "word" ? " active" : "")} onClick={() => setTab("word")}>单词卡</button>
-            <button className={"rtab" + (tab === "sentence" ? " active" : "")} onClick={() => setTab("sentence")}>句子卡</button>
+          {/* 今日复习只来自历史学过的单词（历史仅存单词），所以这里只有单词卡 */}
+          <div key={reviewExpandAll ? "all-open" : "all-closed"}>
+            {visibleReview.length ? (
+              visibleReview.map((item, index) => (
+                <ReviewCard
+                  key={item.word}
+                  item={item}
+                  index={index}
+                  onGrade={onGrade}
+                  initiallyOpen={reviewExpandAll}
+                />
+              ))
+            ) : (
+              <div className="card" style={{ padding: 14, fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
+                今天没有到期的复习词。学过的新词会按记忆曲线安排到后面几天。
+              </div>
+            )}
           </div>
-          {tab === "word" ? (
-            <div key={reviewExpandAll ? "all-open" : "all-closed"}>
-              {visibleReview.length ? (
-                visibleReview.map((item, index) => (
-                  <ReviewCard
-                    key={item.word}
-                    item={item}
-                    index={index}
-                    onGrade={onGrade}
-                    initiallyOpen={reviewExpandAll}
-                  />
-                ))
-              ) : (
-                <div className="card" style={{ padding: 14, fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
-                  今天没有到期的复习词。学过的新词会按记忆曲线安排到后面几天。
-                </div>
-              )}
-            </div>
-          ) : (
-            <div key={reviewExpandAll ? "all-open" : "all-closed"}>
-              {visibleReview.length ? (
-                visibleReview.map((item, index) => (
-                  <ReviewCard
-                    key={item.word}
-                    item={item}
-                    index={index}
-                    onGrade={onGrade}
-                    initiallyOpen={reviewExpandAll}
-                  />
-                ))
-              ) : (
-                <div className="card" style={{ padding: 14, fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
-                  今天没有到期的复习句子。当天课程的新句子会从明天开始按记忆曲线安排复习。
-                </div>
-              )}
-            </div>
-          )}
           <div className="card srs-note">
             <b>记忆法：Leitner 间隔重复</b>
             <br />

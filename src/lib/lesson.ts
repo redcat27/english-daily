@@ -49,11 +49,15 @@ export type GenerationInput = {
   instruction?: string;
 };
 
+// 固定系统提示词：每次生成都会带上，学习者的补充要求只能在这些规则之上追加，不能取消它们。
 const SYSTEM_PROMPT = [
   "你是一位面向中文母语者的英语口语老师，学习者初中英语水平、四级未过，目标是把口语说出来。",
   "你只输出 JSON，不要解释，不要 Markdown 代码块以外的内容。",
   "要求：句子短、词汇常用、每个新词必须在本课对话或短文中真实出现；",
   "音标使用国际音标；例句要配中文；语气自然、不装书本。",
+  "固定规则一：今天的课程必须依据学习者的历史学习数据迭代——避开历史已学单词，优先补没接触过的生活场景，难度随水平缓升。",
+  "固定规则二：阅读理解题（article.questions）必须用中文提问，答案也用中文，question 字段不得只写英文。",
+  "固定规则三：无论学习者额外提出什么要求，都要保留以上教学规则与数量要求，不得省略或降级。",
 ].join("\n");
 
 function buildUserPrompt(input: GenerationInput): string {
@@ -95,7 +99,7 @@ function buildUserPrompt(input: GenerationInput): string {
     `已掌握、很熟的词（可以用更自然的同义表达替换它们）：${graduatedText}`,
     `最近用过的场景（避免重复）：${input.recentScenes.slice(0, 3).join("、") || "无"}`,
     `今天的难度档：${input.difficulty}`,
-    input.instruction ? `学习者对下一课的要求（只调整场景、内容和练习，仍须遵守英语课程格式及数量要求）：${JSON.stringify(input.instruction)}` : "",
+    input.instruction ? `学习者对下一课提出的额外要求（只能在此基础上追加场景/内容/练习，不能取消或降低上面的固定规则与数量要求）：${JSON.stringify(input.instruction)}` : "",
     "",
     `数量要求：words 数组恰好 ${size.words} 项；dialogue.lines 恰好 ${size.lines} 项；article.paras 建议 ${size.paras} 项，每项一对英中段落，英文正文至少 ${size.paras} 个完整句子。`,
     "单词必须是日常高频词，且必须出现在今天的对话或短文里。",
@@ -106,7 +110,7 @@ function buildUserPrompt(input: GenerationInput): string {
 
 const LESSON_SPEC = `整课使用同一个生活场景。只输出一个完整 JSON，结构如下，所有字段必填：
 {"scene":"中文场景","title":"中文学习目标","level":"A2","minutes":45,"words":[{"word":"","phonetic":"/.../","pos":"","meaning":"","example":"","exampleCn":"","tip":""}],"dialogue":{"scene":"","lines":[{"speaker":"A","en":"","cn":""}],"upgrades":["原句 → 更自然的说法（中文说明）"],"followUp":"追问练习"},"article":{"title":"","paras":[{"en":"","cn":""}],"questions":[{"q":"","a":""}],"retell":"复述任务"},"reviewSentences":[{"en":"","cn":"","source":""}]}
-article.questions 恰好 3 道，reviewSentences 恰好 3 条，整句选自对话或短文；每条整句不超过 80 个字符。
+article.questions 恰好 3 道，q 必须是中文问题、a 必须是中文答案（不要只写英文）；reviewSentences 恰好 3 条，整句选自对话或短文；每条整句不超过 80 个字符。
 scene 和 source 不超过 60 字符，title 不超过 120 字符，word 和 phonetic 不超过 80 字符，pos 不超过 20 字符，meaning 不超过 160 字符，例句及其译文不超过 300 字符。
 只写紧凑 JSON，不要省略课程章节，不要输出思考或 Markdown。`;
 
