@@ -501,7 +501,7 @@ export default function LessonApp({ user, data }: Props) {
         </div>
       </header>
 
-      <main className="wrap">
+      <main className={"wrap" + (enOnly ? " en-only" : "")}>
         {data?.lessonWarning ? (
           <div role="status">
             <p>{data.lessonWarning} {todayMessage}</p>

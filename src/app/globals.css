@@ -130,7 +130,7 @@
   .line .body { flex: 1; min-width: 0; }
   .line .en { font-size: var(--text-base); }
   .line .cn { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: 2px; }
-  body.en-only .line .cn { display: none; }
+  .en-only .line .cn { display: none; }
   .line .speak { width: 44px; height: 44px; }
   .upgrades { padding: 12px 14px; border-top: 1px solid var(--color-divider); background: var(--color-surface-offset); }
   .upgrades h4 { margin: 0 0 8px; font-size: var(--text-xs); color: var(--color-text-faint); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
@@ -143,7 +143,7 @@
   .para + .para { border-top: 1px solid var(--color-divider); }
   .para .en { font-size: var(--text-base); }
   .para .cn { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: 3px; }
-  body.en-only .para .cn { display: none; }
+  .en-only .para .cn { display: none; }
   .qa { border-top: 1(--color-divider); }
   .qa { border-top: 1px solid var(--color-divider); }
   .q { width: 100%; text-align: left; background: none; border: 0; padding: 12px 14px; display: flex; gap: 10px; align-items: center; }
@@ -211,6 +211,35 @@
   .proto-note { margin-top: 28px; padding: 12px 14px; border: 1px dashed var(--color-border-strong); border-radius: var(--radius-lg); font-size: var(--text-xs); color: var(--color-text-faint); line-height: 1.7; }
   .proto-note b { color: var(--color-text-muted); }
   .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ===== 表单控件（反馈输入框等） ===== */
+.fb textarea,
+.word-detail textarea,
+textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 92px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin: 0;
+}
+.fb textarea::placeholder,
+textarea::placeholder { color: var(--color-text-faint); }
+.fb textarea:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
 
 /* ===== 逐段喇叭 + 例句喇叭 + 语速控制 ===== */
 .para-en { display: flex; align-items: flex-start; gap: 10px; }
