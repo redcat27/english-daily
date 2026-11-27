@@ -18,7 +18,7 @@ const INTERVALS = [1, 2, 4, 7, 15, 30];
 
 /* ---------------- 小组件 ---------------- */
 
-function SpeakerButton({ text, label }: { text: string; label?: string }) {
+function SpeakerButton({ text, label, phonetic }: { text: string; label?: string; phonetic?: string }) {
   const speed = useSpeed();
   const [state, setState] = useState<PlaybackState>("idle");
   const [error, setError] = useState("");
@@ -42,6 +42,7 @@ function SpeakerButton({ text, label }: { text: string; label?: string }) {
     stop.current = startPronunciation(text, {
       forceSystem: forceSystem || state === "error",
       speed,
+      phonetic,
       cache: { read: ttsCacheGet, write: ttsCachePut },
       onState: (next, message) => { setState(next); setError(message || ""); },
     });
@@ -140,7 +141,7 @@ function ReviewCard({
               </div>
             ) : null}
           </div>
-          <SpeakerButton text={head} label={sentence ? "朗读句子" : "朗读单词"} />
+          <SpeakerButton text={head} label={sentence ? "朗读句子" : "朗读单词"} phonetic={sentence ? undefined : item.phonetic} />
         </div>
       </button>
       {open ? (
@@ -220,13 +221,13 @@ export default function LessonApp({ user, data }: Props) {
     const currentSpeed = getSpeed();
     // 必须和页面上每个喇叭按钮的文本完全一致，否则命中不了内存缓存（iOS 会回落系统音）
     const texts = [
-      ...lesson.words.map((word) => word.word),
+      ...lesson.words.map((word) => ({ text: word.word, phonetic: word.phonetic })),
       ...lesson.words.map((word) => word.example),
       ...lesson.dialogue.lines.map((line) => line.en),
       ...lesson.article.paras.map((para) => para.en),
       ...lesson.reviewSentences.map((sentence) => sentence.en),
       // 复习区词条（来自数据库的到期词）
-      ...review.map((item) => item.word),
+      ...review.map((item) => ({ text: item.word, phonetic: item.phonetic })),
     ];
     // 历史音频不保存：只保留当天与第二天要用的音频
     const tomorrow = data?.nextLesson?.payload;
@@ -825,7 +826,7 @@ function WordRow({ item, index }: { item: LessonPayload["words"][number]; index:
               {item.meaning}
             </div>
           </div>
-          <SpeakerButton text={item.word} label="朗读单词" />
+          <SpeakerButton text={item.word} label="朗读单词" phonetic={item.phonetic} />
         </div>
       </button>
       <div className="word-detail">

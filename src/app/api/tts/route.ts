@@ -5,18 +5,25 @@ export async function POST(request: Request) {
   const text = String(body?.text || "").slice(0, 600);
   if (!text) return Response.json({ ok: false, error: "text required" }, { status: 400 });
 
-  // 语速由用户控制：0.7（很慢）~ 1.3（偏快），默认沿用服务端配置的语速
+  // 语速由用户控制：0.6（很慢）~ 1.4（偏快），默认沿用服务端配置的语速
   const requested = Number(body?.speed);
   const speed = Number.isFinite(requested) && requested > 0
     ? Math.max(0.6, Math.min(1.4, requested))
     : TTS_SPEED;
+
+  // 音标覆盖：单词播放时按页面上显示的音标发音
+  const word = typeof body?.word === "string" ? body.word.trim().slice(0, 60) : "";
+  const phonemes = typeof body?.phonemes === "string"
+    ? body.phonemes.trim().replace(/^\/+|\/+$/g, "").slice(0, 80)
+    : "";
+  const pronunciation = word && phonemes ? [{ word, phonemes }] : undefined;
 
   if (!isMiniMaxConfigured()) {
     return Response.json({ ok: false, error: "MiniMax 未配置" }, { status: 503 });
   }
 
   try {
-    const result = await synthesizeSpeech(text, speed);
+    const result = await synthesizeSpeech(text, { speed, pronunciation });
     if (!result) return Response.json({ ok: false, error: "TTS 无音频" }, { status: 502 });
     return new Response(new Uint8Array(result.audio), {
       headers: {

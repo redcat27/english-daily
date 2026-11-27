@@ -7,6 +7,8 @@ type AudioCache = { read: (text: string) => Promise<Blob | null>; write?: (text:
 type Options = {
   forceSystem?: boolean;
   speed?: number;
+  /** 单个词条的音标，传给后端做发音覆盖 */
+  phonetic?: string;
   cache?: AudioCache;
   onState: (state: PlaybackState, message?: string) => void;
   onSource?: (source: AudioSource) => void;
@@ -42,7 +44,7 @@ export function stopPronunciation() {
 
 /** 预取本页要朗读的文本，让 iOS 点击时能同步播放模型音色 */
 export function primePronunciations(
-  texts: string[],
+  texts: (string | { text: string; phonetic?: string })[],
   speed = 1,
   onProgress?: (loaded: number, total: number) => void
 ) {
@@ -173,7 +175,8 @@ export function startPronunciation(text: string, options: Options): () => void {
   }
 
   const speed = options.speed ?? 1;
-  const cacheKey = audioKey(text, speed);
+  const hint = options.phonetic || "";
+  const cacheKey = audioKey(text, speed, hint);
 
   // 1) 内存里已有模型音频：直接同步播放（iOS 也能用上 MiniMax 音色）
   const primed = memoryGet(cacheKey);
@@ -201,7 +204,7 @@ export function startPronunciation(text: string, options: Options): () => void {
     options.onSource?.("system");
     notifySource("system");
     speakNow("system");
-    void prefetchAudio([text], { concurrency: 1, speed });
+    void prefetchAudio([{ text, phonetic: hint }], { concurrency: 1, speed });
     return () => playback.stop();
   }
 
@@ -222,7 +225,11 @@ export function startPronunciation(text: string, options: Options): () => void {
         const response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, speed }),
+          body: JSON.stringify({
+            text,
+            speed,
+            ...(hint ? { word: text, phonemes: hint } : {}),
+          }),
           signal: AbortSignal.any([abort.signal, AbortSignal.timeout(10000)]),
         });
         if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) {

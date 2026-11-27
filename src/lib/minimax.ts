@@ -191,7 +191,12 @@ export function parseJsonLoose(raw: string): unknown {
   return null;
 }
 
-export async function synthesizeSpeech(text: string, speed?: number): Promise<{ audio: Buffer; mime: string } | null> {
+export type PronunciationHint = { word: string; phonemes: string };
+
+export async function synthesizeSpeech(
+  text: string,
+  options: { speed?: number; pronunciation?: PronunciationHint[] } = {}
+): Promise<{ audio: Buffer; mime: string } | null> {
   if (!isMiniMaxConfigured() || !text) return null;
 
   const response = await fetch(withGroupId(TTS_ENDPOINT), {
@@ -204,9 +209,15 @@ export async function synthesizeSpeech(text: string, speed?: number): Promise<{ 
       stream: false,
       voice_setting: {
         voice_id: TTS_VOICE,
-        speed: speed ?? TTS_SPEED,
+        speed: options.speed ?? TTS_SPEED,
         vol: 1,
         pitch: 0,
+        // 数字、缩写、日期等按英语习惯朗读
+        english_normalization: true,
+        // 音标覆盖：让发音严格等于页面上显示的音标（英语学习场景关键）
+        ...(options.pronunciation && options.pronunciation.length
+          ? { pronunciation_dict: options.pronunciation }
+          : {}),
       },
       audio_setting: {
         sample_rate: 32000,

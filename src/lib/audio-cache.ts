@@ -14,8 +14,8 @@ const memory = new Map<string, Blob>();
 // 音色/语速变化后旧音频必须失效：把版本号与语速一起写进缓存键
 const AUDIO_CACHE_VERSION = "v2";
 
-export function audioKey(text: string, speed: number): string {
-  return `${AUDIO_CACHE_VERSION}|${speed.toFixed(2)}|${text.trim()}`;
+export function audioKey(text: string, speed: number, hint = ""): string {
+  return `${AUDIO_CACHE_VERSION}|${speed.toFixed(2)}|${hint}|${text.trim()}`;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -71,8 +71,17 @@ export async function cachePut(key: string, blob: Blob): Promise<void> {
 }
 
 /** 删除不在保留清单里的音频（历史音频不保存） */
-export async function pruneAudioCache(keepTexts: string[], speed: number): Promise<number> {
-  const keep = new Set(keepTexts.map((text) => audioKey(text, speed)));
+export async function pruneAudioCache(
+  keepItems: (string | SpeakTarget)[],
+  speed: number
+): Promise<number> {
+  // 同一段文本可能同时以「无音标」和「带音标」两种键缓存，两个键都保留
+  const keep = new Set<string>();
+  for (const item of keepItems) {
+    const target = typeof item === "string" ? { text: item, phonetic: "" } : item;
+    keep.add(audioKey(target.text, speed, ""));
+    if (target.phonetic) keep.add(audioKey(target.text, speed, target.phonetic));
+  }
   // 语速变了，旧语速的音频也不再需要
   for (const key of Array.from(memory.keys())) {
     if (!keep.has(key)) memory.delete(key);
@@ -100,21 +109,31 @@ export async function pruneAudioCache(keepTexts: string[], speed: number): Promi
 }
 
 /** 预取一批文本的模型音频（并发受控），用于点击前备好 */
+export type SpeakTarget = { text: string; phonetic?: string };
+
 export async function prefetchAudio(
-  texts: string[],
+  texts: (string | SpeakTarget)[],
   options: { concurrency?: number; speed?: number; onDone?: (loaded: number, total: number) => void } = {}
 ): Promise<number> {
   const concurrency = options.concurrency ?? 4;
   const speed = options.speed ?? 1;
-  const unique = Array.from(new Set(texts.map((t) => t.trim()).filter(Boolean)));
+  const unique = Array.from(
+    new Map(
+      texts
+        .map((t) => (typeof t === "string" ? { text: t, phonetic: "" } : { text: t.text, phonetic: t.phonetic || "" }))
+        .filter((t) => t.text.trim())
+        .map((t) => [audioKey(t.text, speed, t.phonetic), t] as const)
+    ).values()
+  );
   let loaded = 0;
   let index = 0;
 
   const worker = async () => {
     while (index < unique.length) {
-      const text = unique[index];
+      const item = unique[index];
       index += 1;
-      const key = audioKey(text, speed);
+      const text = item.text;
+      const key = audioKey(text, speed, item.phonetic);
       if (memory.has(key)) {
         loaded += 1;
         options.onDone?.(loaded, unique.length);
@@ -130,7 +149,11 @@ export async function prefetchAudio(
         const response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, speed }),
+          body: JSON.stringify({
+            text,
+            speed,
+            ...(item.phonetic ? { word: text, phonemes: item.phonetic } : {}),
+          }),
           signal: AbortSignal.timeout(25000),
         });
         if (response.ok && response.headers.get("content-type")?.startsWith("audio/")) {
